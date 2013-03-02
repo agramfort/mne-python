@@ -294,6 +294,7 @@ def has_command_line_tools():
 requires_mne = np.testing.dec.skipif(not has_command_line_tools(),
                                      'Requires MNE command line tools')
 
+
 def requires_pandas(function):
     """Decorator to skip test if pandas is not available"""
     @wraps(function)
