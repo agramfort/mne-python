@@ -23,9 +23,11 @@ fname = path + '/MEG/sample/sample_audvis-ave.fif'
 evoked = mne.fiff.read_evoked(fname, 'Left Auditory', baseline=(None, 0))
 
 
+# set time instants in seconds (from 50 to 150ms in a step of 10ms)
 times = np.arange(0.05, 0.15, 0.01)
-vmax = 5e-13
+# If times is set to None only 10 regularly spaced topographies will be shown
 
-mne.viz.plot_evoked_topomap(evoked, times, vmax=vmax, ch_type='mag')
+vmax = 5e-13  # set max value to scale colormap
 
-pl.show()
+# mne.viz.plot_evoked_topomap(evoked, times, vmax=vmax, ch_type='mag')
+mne.viz.plot_evoked_topomap(evoked, times=times, ch_type='mag')
