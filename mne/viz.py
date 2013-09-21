@@ -3005,3 +3005,79 @@ def compare_fiff(fname_1, fname_2, fname_out=None, show=True, indent='    ',
     if show is True:
         webbrowser.open_new_tab(fname_out)
     return fname_out
+
+
+def plot_source_spectrogram(stcs, freq_bins, source_index=None, show=True):
+    """Plot source power in time-freqency grid
+
+    Parameters
+    ----------
+    stcs : list of SourceEstimate
+        Source power for consecutive time windows, one SourceEstimate object
+        should be provided for each frequency bin.
+    freq_bins : list of tuples of float
+        Start and end points of frequency bins of interest.
+    source_index : int | None
+        Index of source for which the spectrogram will be plotted. If None,
+        the source with the largest activation will be selected.
+    show : bool
+        Show figure if True.
+    """
+    import pylab as pl
+
+    # Gathering results for each time window
+    source_power = [stc.data for stc in stcs]
+    source_power = np.array(source_power)
+
+    # Finding the source with maximum source power
+    if source_index is None:
+        max_source = np.unravel_index(source_power.argmax(),
+                                      source_power.shape)[1]
+
+    # Preparing time-frequency cell boundaries for plotting
+    stc = stcs[0]
+    time_bounds = np.append(stc.times, stc.times[-1] + stc.tstep)
+    freq_bounds = sorted(set(np.ravel(freq_bins)))
+    freq_ticks = deepcopy(freq_bounds)
+
+    # If there is a gap in the frequency bins record its locations so that it
+    # can be covered with a gray horizontal bar
+    gap_bounds = []
+    for i in range(len(freq_bins) - 1):
+        lower_bound = freq_bins[i][1]
+        upper_bound = freq_bins[i+1][0]
+        if lower_bound != upper_bound:
+            freq_bounds.remove(lower_bound)
+            gap_bounds.append((lower_bound, upper_bound))
+
+    # Preparing time-frequency grid for plotting
+    time_grid, freq_grid = np.meshgrid(time_bounds, freq_bounds)
+
+    # Plotting the results
+    pl.figure(figsize=(9, 6))
+    pl.pcolor(time_grid, freq_grid, source_power[:, max_source, :],
+              cmap=pl.cm.jet)
+    ax = pl.gca()
+
+    pl.title('Time-frequency source power')
+    pl.xlabel('Time (s)')
+    pl.ylabel('Frequency (Hz)')
+
+    ax.set_xticks(time_bounds)
+    pl.xlim(time_bounds[0], time_bounds[-1])
+    pl.yscale('log')
+    ax.set_yticks(freq_ticks)
+    ax.set_yticklabels([np.round(freq, 2) for freq in freq_ticks])
+    pl.ylim(freq_bounds[0], freq_bounds[-1])
+
+    pl.grid(True, ls='-')
+    pl.colorbar()
+    tight_layout()
+
+    # Covering frequency gaps with horizontal bars
+    for lower_bound, upper_bound in gap_bounds:
+        pl.barh(lower_bound, time_bounds[-1] - time_bounds[0], upper_bound -
+                lower_bound, time_bounds[0], color='lightgray')
+
+    if show:
+        pl.show()
