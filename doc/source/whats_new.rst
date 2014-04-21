@@ -55,6 +55,9 @@ Changelog
 
    - Add support for EGI Netstation simple binary files by `Denis Engemann`_
 
+   - Add Stockwell transform for computing phase-normalized time-frequency representations by `Denis Engemann`_ 
+
+
 BUG
 ~~~
 
