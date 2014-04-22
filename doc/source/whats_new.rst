@@ -85,6 +85,7 @@ API
 
 .. _changes_0_7:
 
+
 Version 0.7
 -----------
 
