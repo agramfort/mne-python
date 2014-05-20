@@ -71,6 +71,8 @@ Changelog
    to read FieldTrip neighbor template .mat files and compute between
    sensor adjacency matrices by `Denis Engemann`_
 
+   - Add `mne.viz.plot_ica_scores` function and `ICA.plot_scores` method to visualize component metrics by `Denis Engemann`_
+
 BUG
 ~~~
 
