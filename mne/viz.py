@@ -2094,6 +2094,79 @@ def plot_ica_scores(ica, scores, exclude=None, axhline=None,
     return fig
 
 
+def plot_ica_artifact_rejection(ica, epochs):
+    """Plot evoked after and before ICA cleaning
+
+    Parameters
+    ----------
+    ica : instance of mne.preprocessing.ICA
+        The ICA object.
+    epochs : instance of mne.Epochs
+        The Epochs to be regarded.
+
+    Returns
+    -------
+    fig : instance of pyplot.Figure
+    """
+    import matplotlib.pyplot as plt
+    evoked = epochs.average()
+    evoked_cln = ica.pick_sources_epochs(epochs).average()
+
+    ch_types_used = [k for k in ['mag', 'grad', 'eeg']if k in ica]
+
+    n_rows = len(ch_types_used)
+    fig, axes = plt.subplots(n_rows, 1)
+    fig.suptitle('Average artifact before (red) and after (black) ICA)')
+    axes = axes.flatten()
+
+    evoked.plot(axes=axes)
+    for ax in fig.axes:
+        _ = [l.set_color('r') for l in ax.get_lines()]
+    fig.canvas.draw()
+    evoked_cln.plot(axes=axes)
+    tight_layout(fig=fig)
+    fig.subplots_adjust(top=0.90)
+    fig.canvas.draw()
+    return fig
+
+
+def plot_ica_sources_evoked(ica, epochs, exclude=None, title='ICA evoked'):
+    """Plot average over epochs in ICA space
+
+    Parameters
+    ----------
+    ica : instance of mne.prerocessing.ICA
+        The ICA object.
+    epochs : instance of mne.Epochs
+        The Epochs to be regarded.
+    title : str
+        The figure title.
+    """
+    import matplotlib.pyplot as plt
+    picks = range(ica.n_components_)
+    ica_ave = ica.sources_as_epochs(epochs).average(picks=picks)
+    if exclude is None:
+        exclude = ica.exclude
+
+    fig = plt.figure()
+    times = ica_ave.times * 1e3
+
+    # plot unclassified sources
+    plt.plot(times, ica_ave.data.T, 'k')
+    for ii in exclude:
+        # use indexing to expose event related sources
+        color, label = ('r', 'ICA %02d' % ii)
+        plt.plot(times, ica_ave.data[ii], color='r', label=label)
+
+    plt.title(title)
+    plt.xlim(times[[0, -1]])
+    plt.xlabel('Time (ms)')
+    plt.ylabel('(NA)')
+    plt.legend(loc='best')
+    tight_layout(fig=fig)
+    return fig
+
+
 def _prepare_topo_plot(obj, ch_type, layout):
     """"Aux Function"""
     info = copy.deepcopy(obj.info)

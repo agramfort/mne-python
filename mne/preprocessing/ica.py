@@ -34,11 +34,13 @@ from ..io.open import fiff_open
 from ..io.tag import read_tag
 from ..io.meas_info import write_meas_info, read_meas_info
 from ..constants import Bunch, FIFF
-from ..viz import plot_ica_panel, plot_ica_topomap, plot_ica_scores
-from ..io.channels import _contains_ch_type
+from ..viz import (plot_ica_panel, plot_ica_topomap, plot_ica_scores,
+                   plot_ica_artifact_rejection, plot_ica_sources_evoked)
+from ..io.channels import _contains_ch_type, ContainsMixin
 from ..io.write import start_file, end_file, write_id
 from ..epochs import _is_good
-from ..utils import check_sklearn_version, check_fname, logger, verbose
+from ..utils import check_sklearn_version, logger, verbose
+from ..filter import band_pass_filter
 
 try:
     from sklearn.utils.extmath import fast_dot
@@ -77,7 +79,7 @@ __all__ = ['ICA', 'ica_find_ecg_events', 'ica_find_eog_events', 'score_funcs',
            'read_ica', 'run_ica']
 
 
-class ICA(object):
+class ICA(ContainsMixin):
     """M/EEG signal decomposition using Independent Component Analysis (ICA)
 
     This object can be used to estimate ICA components and then
@@ -730,8 +732,22 @@ class ICA(object):
 
         return fig
 
+    def plot_sources_evoked(self, epochs, exclude=None, title='ICA evoked'):
+        """Plot average over epochs in ICA space
+
+        Parameters
+        ----------
+        epochs : instance of mne.Epochs
+            The Epochs to be regarded.
+        exclude : array_like of int
+            The components marked for exclusion. If None (default), ICA.exclude
+            will be used.
+        """
+        return plot_ica_sources_evoked(ica=self, epochs=epochs,
+                                       exclude=exclude, title=title)
+
     def find_sources_raw(self, raw, target=None, score_func='pearsonr',
-                         start=None, stop=None):
+                         start=None, stop=None, l_freq=None, h_freq=None):
         """Find sources based on own distribution or based on similarity to
         other sources or between source and target.
 
@@ -782,10 +798,13 @@ class ICA(object):
                 raise ValueError('Source and targets do not have the same'
                                  'number of time slices.')
             target = target.ravel()
+        sources, target = _band_pass_filter(self, sources, target, l_freq,
+                                            h_freq)
 
         return _find_sources(sources, target, score_func)
 
-    def find_sources_epochs(self, epochs, target=None, score_func='pearsonr'):
+    def find_sources_epochs(self, epochs, target=None, score_func='pearsonr',
+                            l_freq=None, h_freq=None):
         """Find sources based on relations between source and target
 
         Parameters
@@ -826,6 +845,9 @@ class ICA(object):
                 raise ValueError('Source and targets do not have the same'
                                  'number of time slices.')
             target = target.ravel()
+
+        sources, target = _band_pass_filter(self, sources, target, l_freq,
+                                            h_freq)
 
         return _find_sources(np.hstack(sources), target, score_func)
 
@@ -1022,6 +1044,21 @@ class ICA(object):
         """
         return plot_ica_scores(ica=self, scores=scores, exclude=exclude,
                                axhline=axhline, title=title, figsize=figsize)
+
+    def plot_artifact_rejection(self, epochs):
+        """Plot epochs after and before ICA cleaning
+        Parameters
+        ----------
+        epochs : instance of mne.io.Epochs
+            The epochs to be regarded.
+        ica : instance of mne.preprocessing.ICA
+            The ICA object.
+        Returns
+        -------
+        fig : instance of pyplot.Figure
+        """
+
+        return plot_ica_artifact_rejection(epochs=epochs, ica=self)
 
     def detect_artifacts(self, raw, start_find=None, stop_find=None,
                          ecg_ch=None, ecg_score_func='pearsonr',
@@ -1816,3 +1853,17 @@ def run_ica(raw, n_components, max_pca_components=100,
                       var_criterion=var_criterion,
                       add_nodes=add_nodes)
     return ica
+
+
+def _band_pass_filter(ica, sources, target, l_freq, h_freq):
+    if l_freq is not None and h_freq is not None:
+        logger.info('... filtering ICA sources')
+        sources = band_pass_filter(sources, ica.info['sfreq'],
+                                   l_freq, h_freq,  method='iir')
+        logger.info('... filtering target')
+        target = band_pass_filter(target, ica.info['sfreq'],
+                                  l_freq, h_freq,  method='iir')
+    elif l_freq is not None or h_freq is not None:
+        raise ValueError('Must specify both pass bands')
+
+    return sources, target
