@@ -227,6 +227,8 @@ class ICA(ContainsMixin):
         s += ('%s components' % str(self.n_components_) if
               hasattr(self, 'n_components_') else
               'no dimension reduction')
+        ch_fit = ['"%s"' % c for c in ['mag', 'grad', 'eeg'] if c in self]
+        s += ', channels used: {}'.format('; '.join(ch_fit))
         if self.exclude:
             s += ', %i sources marked for exclusion' % len(self.exclude)
 
@@ -1215,6 +1217,11 @@ class ICA(ContainsMixin):
             explained_variance_ratio_ = pca.explained_variance_ / full_var
             n_components_ = np.sum(explained_variance_ratio_.cumsum()
                                    <= self.n_components)
+            if n_components_ < 1:
+                raise RuntimeError('One PCA component captures most of the '
+                                   'explained variance, your threshold resu'
+                                   'lts in 0 components. You should select '
+                                   'a higher value.')
             sel = slice(n_components_)
         else:
             logger.info('Selecting PCA components by number.')

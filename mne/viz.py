@@ -2121,7 +2121,7 @@ def plot_ica_artifact_rejection(ica, epochs):
 
     evoked.plot(axes=axes)
     for ax in fig.axes:
-        _ = [l.set_color('r') for l in ax.get_lines()]
+        [l.set_color('r') for l in ax.get_lines()]
     fig.canvas.draw()
     evoked_cln.plot(axes=axes)
     tight_layout(fig=fig)

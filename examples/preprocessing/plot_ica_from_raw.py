@@ -49,28 +49,30 @@ picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=False,
 # Use percentages (float) or set the total number of components kept
 # (int). This allows to control the amount of additional denoising.
 
-ica = ICA(n_components=0.95, n_pca_components=1.0, max_pca_components=None,
+ica = ICA(n_components=0.90, n_pca_components=1.0, max_pca_components=None,
           random_state=42)
 
 # decompose sources for raw data using each third sample.
 reject = dict(mag=4e-12, grad=4000e-13)  # exclude nonstationary segments
 
-ica.decompose_raw(raw, picks=picks, decim=2, reject=reject)
-print(ica)
+ica.decompose_raw(raw, picks=picks, decim=1, reject=reject)
+print(ica)  # get some runtime info
 
 ###############################################################################
 # Automatically find the ECG component using correlation with ECG signal.
 
 # As we don't have an ECG channel we use the average of all magnetometers
 # To improve detection, we filter the the channel and pass
+# Don't filter to high to get the t-wave.
 
-ecg = raw[mne.pick_types(raw.info, meg='mag')][0].mean(0)
+picks_mag = mne.pick_types(raw.info, meg='mag')
+ecg = raw[picks_mag][0].mean(0)
 ecg_scores = ica.find_sources_raw(raw, ecg, score_func='pearsonr',
                                   l_freq=3, h_freq=16)
 
 # We use outlier detection to find the relevant components
 from mne.preprocessing import find_outlier_adaptive
-thresh = 5.0
+thresh = 5.0  # conservative
 
 ecg_inds = find_outlier_adaptive(ecg_scores, thresh=thresh)
 
@@ -80,7 +82,7 @@ ica.plot_scores(ecg_scores, exclude=ecg_inds, title=title)
 ica.plot_sources_raw(raw, ecg_inds, start=0, stop=3.0)
 ica.plot_topomap(ecg_inds, colorbar=False)
 
-ica.exclude.extend(ecg_inds)  # mark for exclusion
+ica.exclude += list(ecg_inds)  # mark for exclusion
 
 ###############################################################################
 # Automatically find the EOG component using correlation with EOG signal.
@@ -88,14 +90,14 @@ ica.exclude.extend(ecg_inds)  # mark for exclusion
 eog_ch = 'EOG 061'
 eog_scores = ica.find_sources_raw(raw, eog_ch, score_func='pearsonr',
                                   l_freq=1, h_freq=10)
-eog_inds = list(find_outlier_adaptive(eog_scores, thresh=thresh))
+eog_inds = find_outlier_adaptive(eog_scores, thresh=thresh)
 
 title = 'correlation with EOG'
 ica.plot_scores(eog_scores, exclude=eog_inds, title=title)
 ica.plot_sources_raw(raw, eog_inds, stop=3.0)
 ica.plot_topomap(eog_inds, colorbar=False)
 
-ica.exclude += eog_inds  # mark for exclusion
+ica.exclude += list(eog_inds)  # mark for exclusion
 
 
 ###############################################################################
@@ -143,12 +145,11 @@ ecg_epochs = mne.Epochs(raw, events=events, event_id=event_id,
                         tmin=-0.5, tmax=0.5, baseline=None, proj=False,
                         picks=picks, preload=True)
 
-# plot evoked ECG
+# plot evoked ECG in ICA space
 ica.plot_sources_evoked(ecg_epochs, exclude=ecg_inds)
 
 # plot artifact removal
 ica.plot_artifact_rejection(ecg_epochs)
-plt.subplots_adjust(top=0.90)
 
 ###############################################################################
 # To save an ICA session you can say:
