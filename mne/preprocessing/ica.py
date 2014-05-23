@@ -39,7 +39,7 @@ from ..viz import (plot_ica_panel, plot_ica_topomap, plot_ica_scores,
 from ..io.channels import _contains_ch_type, ContainsMixin
 from ..io.write import start_file, end_file, write_id
 from ..epochs import _is_good
-from ..utils import check_sklearn_version, logger, verbose
+from ..utils import check_sklearn_version, logger, verbose, deprecated
 from ..filter import band_pass_filter
 
 try:
@@ -234,6 +234,8 @@ class ICA(ContainsMixin):
 
         return '<ICA  |  %s>' % s
 
+    @deprecated('`decompose_raw` is deprecated and will be removed in MNE 1.0.'
+                ' Use `fit` instead')
     @verbose
     def decompose_raw(self, raw, picks=None, start=None, stop=None,
                       decim=None, reject=None, flat=None, tstep=2.0,
@@ -344,6 +346,8 @@ class ICA(ContainsMixin):
 
         return self
 
+    @deprecated('`decompose_epochs` is deprecated and will be removed in MNE'
+                ' 1.0. Use `fit` instead')
     @verbose
     def decompose_epochs(self, epochs, picks=None, decim=None, verbose=None):
         """Run the ICA decomposition on epochs
@@ -419,6 +423,8 @@ class ICA(ContainsMixin):
         sources = fast_dot(self.unmixing_matrix_, pca_data)
         return sources
 
+    @deprecated('`get_sources_raw` is deprecated and will be removed in '
+                'MNE 1.0. Use `get_sources` instead')
     def get_sources_raw(self, raw, start=None, stop=None):
         """Estimate raw sources given the unmixing matrix
 
@@ -447,6 +453,8 @@ class ICA(ContainsMixin):
         data, _ = self._pre_whiten(raw[picks, start:stop][0], raw.info, picks)
         return self._get_sources(data)
 
+    @deprecated('`get_sources_epochs` is deprecated and will be removed in '
+                'MNE 1.0. Use `get_sources` instead')
     def get_sources_epochs(self, epochs, concatenate=False):
         """Estimate epochs sources given the unmixing matrix
 
@@ -515,6 +523,8 @@ class ICA(ContainsMixin):
 
         return self
 
+    @deprecated('`sources_as_raw` is deprecated and will be removed in '
+                'MNE 1.0. Use `get_sources` instead')
     def sources_as_raw(self, raw, picks=None, start=None, stop=None):
         """Export sources as raw object
 
@@ -598,6 +608,8 @@ class ICA(ContainsMixin):
         info['bads'] = [ch_names[k] for k in self.exclude]
         info['projs'] = []  # make sure projections are removed.
 
+    @deprecated('`sources_as_raw` is deprecated and will be removed in '
+                'MNE 1.0. Use `get_sources` instead')
     def sources_as_epochs(self, epochs, picks=None):
         """Create epochs in ICA space from epochs object
 
@@ -631,6 +643,8 @@ class ICA(ContainsMixin):
 
         return out
 
+    @deprecated('`plot_sources_raw` is deprecated and will be removed in '
+                'MNE 1.0. Use `plot_sources` instead')
     def plot_sources_raw(self, raw, order=None, start=None, stop=None,
                          n_components=None, source_idx=None, ncol=3, nrow=None,
                          title=None, show=True):
@@ -680,6 +694,8 @@ class ICA(ContainsMixin):
 
         return fig
 
+    @deprecated('`plot_sources_epochs` is deprecated and will be removed in '
+                'MNE 1.0. Use `plot_sources` instead')
     def plot_sources_epochs(self, epochs, order=None, epoch_idx=None,
                             start=None, stop=None, n_components=None,
                             source_idx=None, ncol=3, nrow=None, title=None,
@@ -734,7 +750,7 @@ class ICA(ContainsMixin):
 
         return fig
 
-    def plot_sources_evoked(self, epochs, exclude=None, title='ICA evoked'):
+    def plot_sources(self, epochs, exclude=None, title='ICA evoked'):
         """Plot average over epochs in ICA space
 
         Parameters
@@ -748,6 +764,8 @@ class ICA(ContainsMixin):
         return plot_ica_sources_evoked(ica=self, epochs=epochs,
                                        exclude=exclude, title=title)
 
+    @deprecated('`find_sources_raw` is deprecated and will be removed in '
+                'MNE 1.0. Use `find_bads` instead')
     def find_sources_raw(self, raw, target=None, score_func='pearsonr',
                          start=None, stop=None, l_freq=None, h_freq=None):
         """Find sources based on own distribution or based on similarity to
@@ -805,6 +823,8 @@ class ICA(ContainsMixin):
 
         return _find_sources(sources, target, score_func)
 
+    @deprecated('`find_sources_epochs` is deprecated and will be removed in '
+                'MNE 1.0. Use `find_bads` instead')
     def find_sources_epochs(self, epochs, target=None, score_func='pearsonr',
                             l_freq=None, h_freq=None):
         """Find sources based on relations between source and target
@@ -853,6 +873,8 @@ class ICA(ContainsMixin):
 
         return _find_sources(np.hstack(sources), target, score_func)
 
+    @deprecated('`pick_sources_raw` is deprecated and will be removed in '
+                'MNE 1.0. Use `apply` instead')
     def pick_sources_raw(self, raw, include=None, exclude=None,
                          n_pca_components=None, start=None, stop=None,
                          copy=True):
@@ -924,6 +946,8 @@ class ICA(ContainsMixin):
         raw[picks, start:stop] = data
         return raw
 
+    @deprecated('`pick_sources_epochs` is deprecated and will be removed in '
+                'MNE 1.0. Use `apply` instead')
     def pick_sources_epochs(self, epochs, include=None, exclude=None,
                             n_pca_components=None, copy=True):
         """Recompose epochs
@@ -989,6 +1013,8 @@ class ICA(ContainsMixin):
 
         return epochs
 
+    @deprecated('`pick_topomap` is deprecated and will be removed in '
+                'MNE 1.0. Use `plot_components` instead')
     def plot_topomap(self, source_idx, ch_type='mag', res=500, layout=None,
                      vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                      show=True):
@@ -1047,7 +1073,7 @@ class ICA(ContainsMixin):
         return plot_ica_scores(ica=self, scores=scores, exclude=exclude,
                                axhline=axhline, title=title, figsize=figsize)
 
-    def plot_artifact_rejection(self, epochs):
+    def plot_overlay(self, epochs):
         """Plot epochs after and before ICA cleaning
         Parameters
         ----------
@@ -1062,6 +1088,8 @@ class ICA(ContainsMixin):
 
         return plot_ica_artifact_rejection(epochs=epochs, ica=self)
 
+    @deprecated('`detect_artifacts` is deprecated and will be removed in '
+                'MNE 1.0. Use `find_bads` instead')
     def detect_artifacts(self, raw, start_find=None, stop_find=None,
                          ecg_ch=None, ecg_score_func='pearsonr',
                          ecg_criterion=0.1, eog_ch=None,
