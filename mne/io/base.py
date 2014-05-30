@@ -16,6 +16,7 @@ import numpy as np
 from scipy.signal import hilbert
 from scipy import linalg
 
+from ..io.base import _BaseRaw
 from ..constants import FIFF
 from ..pick import pick_types, channel_type
 from .meas_info import write_meas_info

@@ -33,6 +33,8 @@ from ..io.tree import dir_tree_find
 from ..io.open import fiff_open
 from ..io.tag import read_tag
 from ..io.meas_info import write_meas_info, read_meas_info
+from ..io.base import _BaseRaw
+from ..epochs import _BaseEpochs
 from ..constants import Bunch, FIFF
 from ..viz import (plot_ica_panel, plot_ica_topomap, plot_ica_scores,
                    plot_ica_artifact_rejection, plot_ica_sources_evoked)
@@ -234,6 +236,80 @@ class ICA(ContainsMixin):
 
         return '<ICA  |  %s>' % s
 
+    @verbose
+    def fit(self, inst, picks=None, start=None, stop=None, decim=None,
+            reject=None, flat=None, tstep=2.0, verbose=None):
+        if isinstance(inst, _BaseRaw):
+            self._fit_raw(self, inst, picks, start, stop, decim, reject, flat,
+                          tstep, verbose)
+        elif isinstance(inst, _BaseEpochs):
+            self._fit_epochs(self, inst, picks, decim, verbose)
+        return self
+
+    @verbose
+    def get_sources(self, inst, picks, start, stop):
+        if isinstance(inst, _BaseRaw):
+            sources = self._sources_as_raw(inst, picks, start, stop)
+        elif isinstance(inst, _BaseEpochs):
+            sources = self._sources_as_epochs(inst, picks)
+        return sources
+
+    @verbose
+    def scores_sources(self):
+        if isinstance(inst, _BaseRaw):
+            sources = self._get_sources_raw(raw, start, stop)
+            if target is not None:
+                start, stop = _check_start_stop(raw, start, stop)
+                if hasattr(target, 'ndim'):
+                    if target.ndim < 2:
+                        target = target.reshape(1, target.shape[-1])
+                if isinstance(target, string_types):
+                    pick = _get_target_ch(inst, target)
+                    target, _ = raw[pick, start:stop]
+                if sources.shape[1] != target.shape[1]:
+                    raise ValueError('Source and targets do not have the same'
+                                     'number of time slices.')
+        elif isinstance(inst, _BaseEpochs):
+            sources = self._get_sources_epochs(epochs)
+            if target is not None:
+                if hasattr(target, 'ndim'):
+                    if target.ndim < 3:
+                        target = target.reshape(1, 1, target.shape[-1])
+                if isinstance(target, string_types):
+                    pick = _get_target_ch(inst, target)
+                    target = inst.get_data()[:, pick]
+                if sources.shape[2] != target.shape[2]:
+                    raise ValueError('Source and targets do not have the same'
+                                     'number of time slices.')
+        target = target.ravel()
+
+        # auto target selection
+        sources, target = _band_pass_filter(self, sources, target, l_freq,
+                                            h_freq)
+
+        return _find_sources(sources, target, score_func)
+
+        # auto target selection
+
+        sources, target = _band_pass_filter(self, sources, target, l_freq,
+                                            h_freq)
+
+       _find_sources(np.hstack(sources), target, score_func)
+
+
+    @verbose
+    def find_bads_ecg(self):
+        pass
+
+    @verbose
+    def find_bads_eog(self):
+        pass
+
+    @verbose
+    def apply(self):
+        pass
+
+
     @deprecated('`decompose_raw` is deprecated and will be removed in MNE 1.0.'
                 ' Use `fit` instead')
     @verbose
@@ -284,6 +360,11 @@ class ICA(ContainsMixin):
         self : instance of ICA
             Returns the modified instance.
         """
+        return self.fit(raw, picks, start, stop, decim, reject, flat, tstep,
+                        verbose)
+
+    def _fit_raw(self, raw, picks, start, stop, decim, reject, flat, tstep,
+                 verbose):
         if self.current_fit != 'unfitted':
             raise RuntimeError('ICA decomposition has already been fitted. '
                                'Please start a new ICA session.')
@@ -377,6 +458,9 @@ class ICA(ContainsMixin):
         self : instance of ICA
             Returns the modified instance.
         """
+        return self._fit_epochs(epochs, picks, decim, verbose)
+
+    def _fit_epochs(self, epochs, picks, decim, verbose):
         if self.current_fit != 'unfitted':
             raise RuntimeError('ICA decomposition has already been fitted. '
                                'Please start a new ICA session.')
@@ -444,6 +528,9 @@ class ICA(ContainsMixin):
         sources : array, shape = (n_components, n_times)
             The ICA sources time series.
         """
+        return self._get_sources_raw(raw, start, stop)
+
+    def _get_sources_raw(self, raw, start, stop):
         if not hasattr(self, 'mixing_matrix_'):
             raise RuntimeError('No fit available. Please first fit ICA '
                                'decomposition.')
@@ -470,6 +557,9 @@ class ICA(ContainsMixin):
         epochs_sources : ndarray of shape (n_epochs, n_sources, n_times)
             The sources for each epoch
         """
+        return self._get_sources_epochs(epochs, concatenate)
+
+    def _get_sources_epochs(self, epochs, concatenate):
         if not hasattr(self, 'mixing_matrix_'):
             raise RuntimeError('No fit available. Please first fit ICA '
                                'decomposition.')
@@ -547,6 +637,9 @@ class ICA(ContainsMixin):
         out : instance of mne.Raw
             Container object for ICA sources
         """
+        return self._sources_as_raw(raw, picks, start, stop)
+
+    def _sources_as_raw(self, raw, picks, start, stop):
         # include 'reference' channels for comparison with ICA
         if picks is None:
             picks = pick_types(raw.info, meg=False, eeg=False, misc=True,
@@ -626,9 +719,12 @@ class ICA(ContainsMixin):
         ica_epochs : instance of Epochs
             The epochs in ICA space.
         """
+        return self._sources_as_epochs(epochs, picks)
 
+    def _sources_as_epochs(self, epochs, picks):
+        """Aux method"""
         out = epochs.copy()
-        sources = self.get_sources_epochs(epochs)
+        sources = self._get_sources_epochs(epochs)
         if picks is None:
             picks = pick_types(epochs.info, meg=False, eeg=False, misc=True,
                                ecg=True, eog=True, stim=True, exclude='bads')
@@ -804,24 +900,11 @@ class ICA(ContainsMixin):
         scores : ndarray
             scores for each source as returned from score_func
         """
-        sources = self.get_sources_raw(raw=raw, start=start, stop=stop)
-        # auto target selection
-        if target is not None:
-            start, stop = _check_start_stop(raw, start, stop)
-            if hasattr(target, 'ndim'):
-                if target.ndim < 2:
-                    target = target.reshape(1, target.shape[-1])
-            if isinstance(target, string_types):
-                pick = _get_target_ch(raw, target)
-                target, _ = raw[pick, start:stop]
-            if sources.shape[1] != target.shape[1]:
-                raise ValueError('Source and targets do not have the same'
-                                 'number of time slices.')
-            target = target.ravel()
-        sources, target = _band_pass_filter(self, sources, target, l_freq,
-                                            h_freq)
+        return self.score_sources(inst=raw, target=target,
+                                  score_func=score_func,
+                                  start=start, stop=stop, l_freq=l_freq,
+                                  h_freq=h_freq)
 
-        return _find_sources(sources, target, score_func)
 
     @deprecated('`find_sources_epochs` is deprecated and will be removed in '
                 'MNE 1.0. Use `find_bads` instead')
@@ -854,24 +937,9 @@ class ICA(ContainsMixin):
         scores : ndarray
             scores for each source as returned from score_func
         """
-        sources = self.get_sources_epochs(epochs=epochs)
-        # auto target selection
-        if target is not None:
-            if hasattr(target, 'ndim'):
-                if target.ndim < 3:
-                    target = target.reshape(1, 1, target.shape[-1])
-            if isinstance(target, string_types):
-                pick = _get_target_ch(epochs, target)
-                target = epochs.get_data()[:, pick]
-            if sources.shape[2] != target.shape[2]:
-                raise ValueError('Source and targets do not have the same'
-                                 'number of time slices.')
-            target = target.ravel()
-
-        sources, target = _band_pass_filter(self, sources, target, l_freq,
-                                            h_freq)
-
-        return _find_sources(np.hstack(sources), target, score_func)
+        return self.score_sources(inst=epochs, target=target,
+                                  score_func=score_func, l_freq=l_freq,
+                                  h_freq=h_freq)
 
     @deprecated('`pick_sources_raw` is deprecated and will be removed in '
                 'MNE 1.0. Use `apply` instead')
