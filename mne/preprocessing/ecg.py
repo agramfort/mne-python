@@ -152,34 +152,19 @@ def find_ecg_events(raw, event_id=999, ch_name=None, tstart=0.0,
     -------
     ecg_events : array
         Events.
-    ch_ECG : string
+    ch_ecg : string
         Name of channel used.
     average_pulse : float
         Estimated average pulse.
     """
     info = raw.info
 
-    # Geting ECG Channel
-    if ch_name is None:
-        ch_ECG = pick_types(info, meg=False, eeg=False, stim=False,
-                            eog=False, ecg=True, emg=False, ref_meg=False,
-                            exclude='bads')
-    else:
-        ch_ECG = pick_channels(raw.ch_names, include=[ch_name])
-        if len(ch_ECG) == 0:
-            raise ValueError('%s not in channel list (%s)' %
-                             (ch_name, raw.ch_names))
-
-    if len(ch_ECG) == 0 and ch_name is None:
-        raise Exception('No ECG channel found. Please specify ch_name '
-                        'parameter e.g. MEG 1531')
-
-    assert len(ch_ECG) == 1
-
+    idx_ecg = _get_ecg_channel_index(ch_name, info, raw)
+    assert len(idx_ecg) == 1
     logger.info('Using channel %s to identify heart beats'
-                % raw.ch_names[ch_ECG[0]])
+                % raw.ch_names[idx_ecg[0]])
 
-    ecg, times = raw[ch_ECG, :]
+    ecg, times = raw[idx_ecg, :]
 
     # detecting QRS and generating event file
     ecg_events = qrs_detector(info['sfreq'], ecg.ravel(), tstart=tstart,
@@ -193,4 +178,23 @@ def find_ecg_events(raw, event_id=999, ch_name=None, tstart=0.0,
 
     ecg_events = np.c_[ecg_events + raw.first_samp, np.zeros(n_events),
                        event_id * np.ones(n_events)]
-    return ecg_events, ch_ECG, average_pulse
+    return ecg_events, idx_ecg, average_pulse
+
+
+def _get_ecg_channel_index(ch_name, info, inst):
+     # Geting ECG Channel
+    if ch_name is None:
+        eog_idx = pick_types(info, meg=False, eeg=False, stim=False,
+                            eog=False, ecg=True, emg=False, ref_meg=False,
+                            exclude='bads')
+    else:
+        eog_idx = pick_channels(inst.ch_names, include=[ch_name])
+        if len(eog_idx) == 0:
+            raise ValueError('%s not in channel list (%s)' %
+                             (ch_name, inst.ch_names))
+
+    if len(eog_idx) == 0 and ch_name is None:
+        raise Exception('No ECG channel found. Please specify ch_name '
+                        'parameter e.g. MEG 1531')
+
+    return eog_idx

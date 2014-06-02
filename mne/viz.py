@@ -3,7 +3,7 @@
 from __future__ import print_function
 
 # Authors: Alexandre Gramfort <gramfort@nmr.mgh.harvard.edu>
-#          Denis Engemann <d.engemann@fz-juelich.de>
+#          Denis Engemann <denis.engemann@gmail.com>
 #          Martin Luessi <mluessi@nmr.mgh.harvard.edu>
 #          Eric Larson <larson.eric.d@gmail.com>
 #          Cathy Nangini <cnangini@gmail.com>
@@ -36,7 +36,7 @@ from collections import deque
 from .fixes import tril_indices, Counter
 from .baseline import rescale
 from .utils import (get_subjects_dir, get_config, set_config, _check_subject,
-                    logger, verbose)
+                    logger, verbose, deprecated)
 from .io import show_fiff
 from .constants import FIFF
 from .pick import channel_type, pick_types
@@ -1880,7 +1880,8 @@ def _plot_ica_panel_onpick(event, sources=None, ylims=None):
         raise err
 
 
-@verbose
+@deprecated('`plot_ica_panel` is deprecated and will be removed in '
+            'MNE 1.0. Use `plot_ica_sources` instead')
 def plot_ica_panel(sources, start=None, stop=None, n_components=None,
                    source_idx=None, ncol=3, nrow=10, verbose=None,
                    title=None, show=True):
@@ -1966,6 +1967,8 @@ def plot_ica_panel(sources, start=None, stop=None, n_components=None,
     return fig
 
 
+@deprecated('`plot_ica_topomap` is deprecated and will be removed in '
+            'MNE 1.0. Use `plot_ica_components` instead')
 def plot_ica_topomap(ica, source_idx, ch_type='mag', res=500, layout=None,
                      vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                      show=True):
@@ -2094,7 +2097,29 @@ def plot_ica_scores(ica, scores, exclude=None, axhline=None,
     return fig
 
 
-def plot_ica_artifact_rejection(ica, epochs):
+def plot_ica_overlay(ica, inst, start=None, stop=None, title=''):
+    if isinstance(inst, _BaseRaw):
+        if start is None:
+            start = 0.0
+        if stop is None:
+            stop = 1.5
+        raw_cln = ica.apply(inst, start=start, stop=stop)
+        start_compare, stop_compare = inst.time_as_index([start, stop])
+        data, times = inst[picks, start_compare:stop_compare]
+        data_clean, _ = raw_cln[:]
+
+        fig = _plot_ica_overlay_raw(raw=inst, raw_cln=raw_cln, times=times * 1e3)
+    elif isinstance(inst, Evoked):
+        evoked_cln = ica.apply(inst)
+        fig = _plot_ica_overlay_evoked(evoked=inst, evoked_cln=evoked_cln,
+                                       title=title)
+    else:
+        raise ValueError('Expected Raw or Evoked objects as input, '
+                         'got %s instead' % inst)
+    return fig
+
+
+def _plot_ica_overlay_raw(data, data_cln, times, title):
     """Plot evoked after and before ICA cleaning
 
     Parameters
@@ -2109,12 +2134,43 @@ def plot_ica_artifact_rejection(ica, epochs):
     fig : instance of pyplot.Figure
     """
     import matplotlib.pyplot as plt
-    evoked = epochs.average()
-    evoked_cln = ica.pick_sources_epochs(epochs).average()
+        # Restore sensor space data and keep all PCA components
+    # let's now compare the date before and after cleaning.
+    # first the raw data
+    fig, ax1, ax2 = plt.subplots(1, 2, sharex=True, sharey=True)
+    ax1.plot(times, data.T, color='r')
+    ax1.plot(times, data_cln.T, color='k')
+    ax1.set_xlabel('time (s)')
+    ax1.set_xlim(times[0], times[-1])
+    ax1.show()
 
-    ch_types_used = [k for k in ['mag', 'grad', 'eeg']if k in ica]
+    # now the affected channel
+    ax2.plot(times, data.mean(0), color='r')
+    ax2.plot(times, data_cln.mean(0), color='k')
+    ax2.set_xlim(100, 106)
+    ax1.set_xlabel('time (ms)')
+    ax1.set_xlim(times[0], times[-1])
+    ax2.show()
 
-    n_rows = len(ch_types_used)
+    return fig
+
+
+def _plot_ica_overlay_evoked(evoked, evoked_cln, n_rows):
+    """Plot evoked after and before ICA cleaning
+
+    Parameters
+    ----------
+    ica : instance of mne.preprocessing.ICA
+        The ICA object.
+    epochs : instance of mne.Epochs
+        The Epochs to be regarded.
+
+    Returns
+    -------
+    fig : instance of pyplot.Figure
+    """
+    import matplotlib.pyplot as plt
+
     fig, axes = plt.subplots(n_rows, 1)
     fig.suptitle('Average artifact before (red) and after (black) ICA)')
     axes = axes.flatten()
@@ -2130,7 +2186,7 @@ def plot_ica_artifact_rejection(ica, epochs):
     return fig
 
 
-def plot_ica_sources_evoked(ica, epochs, exclude=None, title='ICA evoked'):
+def plot_ica_sources_evoked(evoked_ica, exclude, title):
     """Plot average over epochs in ICA space
 
     Parameters
@@ -2143,20 +2199,16 @@ def plot_ica_sources_evoked(ica, epochs, exclude=None, title='ICA evoked'):
         The figure title.
     """
     import matplotlib.pyplot as plt
-    picks = range(ica.n_components_)
-    ica_ave = ica.sources_as_epochs(epochs).average(picks=picks)
-    if exclude is None:
-        exclude = ica.exclude
 
     fig = plt.figure()
-    times = ica_ave.times * 1e3
+    times = evoked_ica.times * 1e3
 
     # plot unclassified sources
-    plt.plot(times, ica_ave.data.T, 'k')
+    plt.plot(times, evoked_ica.data.T, 'k')
     for ii in exclude:
         # use indexing to expose event related sources
         color, label = ('r', 'ICA %02d' % ii)
-        plt.plot(times, ica_ave.data[ii], color='r', label=label)
+        plt.plot(times, evoked_ica.data[ii], color='r', label=label)
 
     plt.title(title)
     plt.xlim(times[[0, -1]])

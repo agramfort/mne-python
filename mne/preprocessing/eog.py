@@ -40,37 +40,10 @@ def find_eog_events(raw, event_id=998, l_freq=1, h_freq=10,
     info = raw.info
 
     # Getting EOG Channel
-    if ch_name is None:
-        ch_eog = pick_types(info, meg=False, eeg=False, stim=False,
-                            eog=True, ecg=False, emg=False, ref_meg=False,
-                            exclude='bads')
-        if len(ch_eog) == 0:
-            logger.info('No EOG channels found')
-            logger.info('Trying with EEG 061 and EEG 062')
-            ch_eog = pick_channels(raw.ch_names,
-                                   include=['EEG 061', 'EEG 062'])
-            if len(ch_eog) != 2:
-                raise ValueError('EEG 61 or EEG 62 channel not found !!')
+    eog_inds = _get_eog_channel_indices(ch_name, info, raw)
+    logger.info('EOG channel index for this subject is: %s' % eog_inds)
 
-    else:
-
-        # Check if multiple EOG Channels
-        if ',' in ch_name:
-            ch_name = ch_name.split(',')
-        else:
-            ch_name = [ch_name]
-
-        ch_eog = pick_channels(raw.ch_names, include=ch_name)
-
-        if len(ch_eog) == 0:
-            raise ValueError('%s not in channel list' % ch_name)
-        else:
-            logger.info('Using channel %s as EOG channel%s' % (
-                        " and ".join(ch_name), '' if len(ch_eog) < 2 else 's'))
-
-    logger.info('EOG channel index for this subject is: %s' % ch_eog)
-
-    eog, _ = raw[ch_eog, :]
+    eog, _ = raw[eog_inds, :]
 
     eog_events = _find_eog_events(eog, event_id=event_id, l_freq=l_freq,
                                   h_freq=h_freq,
@@ -120,3 +93,34 @@ def _find_eog_events(eog, event_id, l_freq, h_freq, sampling_rate, first_samp,
                        event_id * np.ones(n_events)]
 
     return eog_events
+
+
+def _get_eog_channel_indices(ch_name, info, inst):
+    if ch_name is None:
+        ch_eog = pick_types(info, meg=False, eeg=False, stim=False,
+                            eog=True, ecg=False, emg=False, ref_meg=False,
+                            exclude='bads')
+    if len(ch_eog) == 0:
+        logger.info('No EOG channels found')
+        logger.info('Trying with EEG 061 and EEG 062')
+        eog_inds = pick_channels(inst.ch_names,
+                                 include=['EEG 061', 'EEG 062'])
+        if len(eog_inds) != 2:
+            raise ValueError('EEG 61 or EEG 62 channel not found !!')
+    else:
+
+        # Check if multiple EOG Channels
+        if ',' in ch_name:
+            ch_name = ch_name.split(',')
+        else:
+            ch_name = [ch_name]
+
+        eog_inds = pick_channels(inst.ch_names, include=ch_name)
+
+        if len(eog_inds) == 0:
+            raise ValueError('%s not in channel list' % ch_name)
+        else:
+            logger.info('Using channel %s as EOG channel%s' % (
+                        " and ".join(ch_name),
+                        '' if len(eog_inds) < 2 else 's'))
+    return eog_inds
