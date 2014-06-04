@@ -38,6 +38,9 @@ from .baseline import rescale
 from .utils import (get_subjects_dir, get_config, set_config, _check_subject,
                     logger, verbose, deprecated)
 from .io import show_fiff
+# from .io.base import _BaseRaw
+# from .io.evoked import Evoked
+# from .epochs import _BaseEpochs
 from .constants import FIFF
 from .pick import channel_type, pick_types
 from .io.proj import make_projector, setup_proj
@@ -1880,98 +1883,18 @@ def _plot_ica_panel_onpick(event, sources=None, ylims=None):
         raise err
 
 
-@deprecated('`plot_ica_panel` is deprecated and will be removed in '
-            'MNE 1.0. Use `plot_ica_sources` instead')
-def plot_ica_panel(sources, start=None, stop=None, n_components=None,
-                   source_idx=None, ncol=3, nrow=10, verbose=None,
-                   title=None, show=True):
-    """Create panel plots of ICA sources
-
-    Clicking on the plot of an individual source opens a new figure showing
-    the source.
-
-    Parameters
-    ----------
-    sources : ndarray
-        Sources as drawn from ica.get_sources.
-    start : int
-        x-axis start index. If None from the beginning.
-    stop : int
-        x-axis stop index. If None to the end.
-    n_components : int
-        Number of components fitted.
-    source_idx : array-like
-        Indices for subsetting the sources.
-    ncol : int
-        Number of panel-columns.
-    nrow : int
-        Number of panel-rows.
-    title : str
-        The figure title. If None a default is provided.
-    verbose : bool, str, int, or None
-        If not None, override default verbose level (see mne.verbose).
-    show : bool
-        If True, plot will be shown, else just the figure is returned.
-
-    Returns
-    -------
-    fig : instance of pyplot.Figure
-    """
-    import matplotlib.pyplot as plt
-
-    if source_idx is None:
-        source_idx = np.arange(len(sources))
-    else:
-        source_idx = np.array(source_idx)
-
-    for param in ['nrow', 'n_components']:
-        if eval(param) is not None:
-            warnings.warn('The `%s` parameter is deprecated and will be'
-                          'removed in MNE-Python 0.8' % param,
-                          DeprecationWarning)
-
-    n_components = len(sources)
-    sources = sources[source_idx, start:stop]
-    ylims = sources.min(), sources.max()
-    xlims = np.arange(sources.shape[-1])[[0, -1]]
-    fig, axes = _prepare_trellis(n_components, ncol)
-    if title is None:
-        fig.suptitle('MEG signal decomposition'
-                     ' -- %i components.' % n_components, size=16)
-    elif title:
-        fig.suptitle(title, size=16)
-
-    plt.subplots_adjust(wspace=0.05, hspace=0.05)
-
-    for idx, (ax, source) in enumerate(zip(axes, sources)):
-        ax.grid(linestyle='-', color='gray', linewidth=.25)
-        component = '[%i]' % idx
-
-        # plot+ emebed idx and comp. name to use in callback
-        line = ax.plot(source, linewidth=0.5, color='red', picker=1e9)[0]
-        vars(line)['_mne_src_idx'] = idx
-        vars(line)['_mne_component'] = component
-        ax.set_xlim(xlims)
-        ax.set_ylim(ylims)
-        ax.text(0.05, .95, component, transform=ax.transAxes,
-                verticalalignment='top')
-        plt.setp(ax.get_xticklabels(), visible=False)
-        plt.setp(ax.get_yticklabels(), visible=False)
-    # register callback
-    callback = partial(_plot_ica_panel_onpick, sources=sources, ylims=ylims)
-    fig.canvas.mpl_connect('pick_event', callback)
-
-    if show:
-        plt.show()
-
-    return fig
-
-
 @deprecated('`plot_ica_topomap` is deprecated and will be removed in '
             'MNE 1.0. Use `plot_ica_components` instead')
 def plot_ica_topomap(ica, source_idx, ch_type='mag', res=500, layout=None,
                      vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                      show=True):
+    return plot_ica_components(ica, source_idx, ch_type, res, layout,
+                               vmax, cmap, sensors, colorbar)
+
+
+def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
+                        vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
+                        show=True):
     """ Plot topographic map from ICA component.
 
     Parameters
@@ -2052,6 +1975,191 @@ def plot_ica_topomap(ica, source_idx, ch_type='mag', res=500, layout=None,
     return fig
 
 
+@deprecated('`plot_ica_panel` is deprecated and will be removed in '
+            'MNE 1.0. Use `plot_ica_sources` instead')
+def plot_ica_panel(sources, start=None, stop=None,
+                   source_idx=None, ncol=3, verbose=None,
+                   title=None, show=True):
+    """Create panel plots of ICA sources
+
+    Clicking on the plot of an individual source opens a new figure showing
+    the source.
+
+    Parameters
+    ----------
+    sources : ndarray
+        Sources as drawn from ica.get_sources.
+    start : int
+        x-axis start index. If None from the beginning.
+    stop : int
+        x-axis stop index. If None to the end.
+    source_idx : array-like
+        Indices for subsetting the sources.
+    ncol : int
+        Number of panel-columns.
+    title : str
+        The figure title. If None a default is provided.
+    verbose : bool, str, int, or None
+        If not None, override default verbose level (see mne.verbose).
+    show : bool
+        If True, plot will be shown, else just the figure is returned.
+
+    Returns
+    -------
+    fig : instance of pyplot.Figure
+    """
+
+    return _plot_ica_grid(sources=sources, start=start, stop=stop,
+                          source_idx=source_idx, ncol=ncol, verbose=verbose,
+                          title=title, show=show)
+
+
+def plot_ica_sources(ica, inst, order=None, exclude=None, start=None,
+                     stop=None, show=True, title=None):
+    if exclude is None:
+        exclude = ica.exclude
+    if isinstance(inst, _BaseRaw) or isinstance(inst, _BaseEpochs):
+        if isinstance(inst, _BaseRaw):
+            sources = ica._get_sources_raw(inst)
+        else:
+            if start is not None or stop is not None:
+                inst = inst.crop(start, stop, copy=True)
+                start, stop = None, None
+            sources = ica._get_sources_epochs(inst, concatenate=True)
+        if order is not None:
+            if np.isscalar(order):
+                order = [order]
+            sources = np.atleast_2d(sources[order])
+
+        fig = _plot_ica_grid(sources, start=start, stop=stop,
+                             source_idx=order,
+                             ncol=len(sources) // 10,
+                             exclude=exclude,
+                             title=title, show=show)
+
+    elif isinstance(inst, Evoked):
+        if start is not None or stop is not None:
+            inst = inst.crop(start, stop, copy=True)
+        evoked_cln = ica.apply(inst)
+        fig = _plot_ica_sources_evoked(evoked=inst, evoked_cln=evoked_cln,
+                                       exclude=exclude, title=title)
+
+    return fig
+
+
+def _plot_ica_grid(sources, start=None, stop=None,
+                   source_idx=None, ncol=3, exclude=None, verbose=None,
+                   title=None, show=True):
+    """Create panel plots of ICA sources
+
+    Clicking on the plot of an individual source opens a new figure showing
+    the source.
+
+    Parameters
+    ----------
+    sources : ndarray
+        Sources as drawn from ica.get_sources.
+    start : int
+        x-axis start index. If None from the beginning.
+    stop : int
+        x-axis stop index. If None to the end.
+    n_components : int
+        Number of components fitted.
+    source_idx : array-like
+        Indices for subsetting the sources.
+    ncol : int
+        Number of panel-columns.
+    title : str
+        The figure title. If None a default is provided.
+    verbose : bool, str, int, or None
+        If not None, override default verbose level (see mne.verbose).
+    show : bool
+        If True, plot will be shown, else just the figure is returned.
+
+    Returns
+    -------
+    fig : instance of pyplot.Figure
+    """
+    import matplotlib.pyplot as plt
+
+    if source_idx is None:
+        source_idx = np.arange(len(sources))
+    else:
+        source_idx = np.array(source_idx)
+    if exclude is None:
+        exclude = []
+
+    n_components = len(sources)
+    sources = sources[source_idx, start:stop]
+    ylims = sources.min(), sources.max()
+    xlims = np.arange(sources.shape[-1])[[0, -1]]
+    fig, axes = _prepare_trellis(n_components, ncol)
+    if title is None:
+        fig.suptitle('MEG signal decomposition'
+                     ' -- %i components.' % n_components, size=16)
+    elif title:
+        fig.suptitle(title, size=16)
+
+    plt.subplots_adjust(wspace=0.05, hspace=0.05)
+
+    for idx, (ax, source) in enumerate(zip(axes, sources)):
+        ax.grid(linestyle='-', color='gray', linewidth=.25)
+        component = '[%i]' % idx
+
+        # plot+ emebed idx and comp. name to use in callback
+        color = 'gray' if idx in exclude else 'reds'
+        line = ax.plot(source, linewidth=0.5, color=color, picker=1e9)[0]
+        vars(line)['_mne_src_idx'] = idx
+        vars(line)['_mne_component'] = component
+        ax.set_xlim(xlims)
+        ax.set_ylim(ylims)
+        ax.text(0.05, .95, component, transform=ax.transAxes,
+                verticalalignment='top')
+        plt.setp(ax.get_xticklabels(), visible=False)
+        plt.setp(ax.get_yticklabels(), visible=False)
+    # register callback
+    callback = partial(_plot_ica_panel_onpick, sources=sources, ylims=ylims)
+    fig.canvas.mpl_connect('pick_event', callback)
+
+    if show:
+        plt.show()
+
+    return fig
+
+
+def _plot_ica_sources_evoked(evoked_ica, exclude, title):
+    """Plot average over epochs in ICA space
+
+    Parameters
+    ----------
+    ica : instance of mne.prerocessing.ICA
+        The ICA object.
+    epochs : instance of mne.Epochs
+        The Epochs to be regarded.
+    title : str
+        The figure title.
+    """
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    times = evoked_ica.times * 1e3
+
+    # plot unclassified sources
+    plt.plot(times, evoked_ica.data.T, 'k')
+    for ii in exclude:
+        # use indexing to expose event related sources
+        color, label = ('r', 'ICA %02d' % ii)
+        plt.plot(times, evoked_ica.data[ii], color='r', label=label)
+
+    plt.title(title)
+    plt.xlim(times[[0, -1]])
+    plt.xlabel('Time (ms)')
+    plt.ylabel('(NA)')
+    plt.legend(loc='best')
+    tight_layout(fig=fig)
+    return fig
+
+
 def plot_ica_scores(ica, scores, exclude=None, axhline=None,
                     title='ICA component scores', figsize=(12, 6)):
     """Plot scores and detected components
@@ -2097,7 +2205,7 @@ def plot_ica_scores(ica, scores, exclude=None, axhline=None,
     return fig
 
 
-def plot_ica_overlay(ica, inst, start=None, stop=None, title=''):
+def plot_ica_overlay(ica, inst, picks=None, start=None, stop=None, title=''):
     if isinstance(inst, _BaseRaw):
         if start is None:
             start = 0.0
@@ -2110,6 +2218,10 @@ def plot_ica_overlay(ica, inst, start=None, stop=None, title=''):
 
         fig = _plot_ica_overlay_raw(raw=inst, raw_cln=raw_cln, times=times * 1e3)
     elif isinstance(inst, Evoked):
+        if start is not None and stop is not None:
+            inst = inst.crop(start, stop, copy=True)
+        if picks is not None:
+            inst.pick_channels([inst.ch_names[p] for p in picks])
         evoked_cln = ica.apply(inst)
         fig = _plot_ica_overlay_evoked(evoked=inst, evoked_cln=evoked_cln,
                                        title=title)
@@ -2183,39 +2295,6 @@ def _plot_ica_overlay_evoked(evoked, evoked_cln, n_rows):
     tight_layout(fig=fig)
     fig.subplots_adjust(top=0.90)
     fig.canvas.draw()
-    return fig
-
-
-def plot_ica_sources_evoked(evoked_ica, exclude, title):
-    """Plot average over epochs in ICA space
-
-    Parameters
-    ----------
-    ica : instance of mne.prerocessing.ICA
-        The ICA object.
-    epochs : instance of mne.Epochs
-        The Epochs to be regarded.
-    title : str
-        The figure title.
-    """
-    import matplotlib.pyplot as plt
-
-    fig = plt.figure()
-    times = evoked_ica.times * 1e3
-
-    # plot unclassified sources
-    plt.plot(times, evoked_ica.data.T, 'k')
-    for ii in exclude:
-        # use indexing to expose event related sources
-        color, label = ('r', 'ICA %02d' % ii)
-        plt.plot(times, evoked_ica.data[ii], color='r', label=label)
-
-    plt.title(title)
-    plt.xlim(times[[0, -1]])
-    plt.xlabel('Time (ms)')
-    plt.ylabel('(NA)')
-    plt.legend(loc='best')
-    tight_layout(fig=fig)
     return fig
 
 

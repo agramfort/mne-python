@@ -1,6 +1,5 @@
-# Authors: Alexandre Gramfort <gramfort@nmr.mgh.harvard.edu>
-#          Matti Hamalainen <msh@nmr.mgh.harvard.edu>
-#          Denis Engemann <d.engemann@fz-juelich.de>
+# Authors: Denis A. Engemann <denis.engemann@gmail.com>
+#          Alexandre Gramfort <gramfort@nmr.mgh.harvard.edu>
 #
 # License: BSD (3-clause)
 
@@ -33,9 +32,9 @@ from ..io.tree import dir_tree_find
 from ..io.open import fiff_open
 from ..io.tag import read_tag
 from ..io.meas_info import write_meas_info, read_meas_info
-from ..io.base import _BaseRaw
-from ..io import Evoked
-from ..epochs import _BaseEpochs
+# from ..io.base import _BaseRaw
+# from ..io import Evoked
+# from ..epochs import _BaseEpochs
 from ..constants import Bunch, FIFF
 from ..viz import (plot_ica_components, plot_ica_scores,
                    plot_ica_sources, plot_ica_overlay)
@@ -890,7 +889,8 @@ class ICA(ContainsMixin):
 
         return plot_sources()
 
-    def plot_sources(self, inst, exclude=None, title='ICA evoked'):
+    def plot_sources(self, inst, order, exclude, title=None, start=None,
+                     stop=None, show=True, title=None):
         """Plot average over epochs in ICA space
 
         Parameters
@@ -901,29 +901,9 @@ class ICA(ContainsMixin):
             The components marked for exclusion. If None (default), ICA.exclude
             will be used.
         """
-        if exclude is None:
-            exclude = self.exclude
-        if isinstance(inst, _BaseRaw) or isinstance(inst, _BaseEpochs):
-            if isinstance(inst, _BaseRaw):
-                sources = self._get_sources_raw(inst)
-            else:
-                sources = self._get_sources_epochs(inst, concatenate=True)
-            if order is not None:
-                if np.isscalar(order):
-                    order = [order]
-                sources = np.atleast_2d(sources[order])
 
-            fig = plot_ica_panel(sources, start=start, stop=stop,
-                                 n_components=n_components,
-                                 source_idx=source_idx,
-                                 ncol=ncol, nrow=nrow, title=title, show=show)
-
-        elif isinstance(inst, Evoked):
-            evoked_cln = self.apply(inst)
-            fig = plot_ica_sources_evoked(evoked=inst, evoked_cln=evoked_cln,
-                                          exclude=exclude, title=title)
-
-        return fig
+        return plot_ica_sources(self, inst, order, exclude, title, start
+                                stop, show, title)
 
     def plot_overlay(self, inst, start=None, stop=None, title):
         return plot_ica_overlay(self, inst, start=start, stop=stop,
