@@ -269,23 +269,19 @@ class ICA(ContainsMixin):
                 if isinstance(target, string_types):
                     pick = _get_target_ch(inst, target)
                     target, _ = inst[pick, start:stop]
-                if sources.shape[1] != target.shape[1]:
-                    raise ValueError('Source and targets do not have the same'
-                                     'number of time slices.')
         elif isinstance(inst, _BaseEpochs):
-            sources = self._transform_epochs(inst)
+            sources = self._transform_epochs(inst, concatenate=True)
             if target is not None:
-                if hasattr(target, 'ndim'):
-                    if target.ndim < 3:
-                        target = target.reshape(1, 1, target.shape[-1])
                 if isinstance(target, string_types):
                     pick = _get_target_ch(inst, target)
                     target = inst.get_data()[:, pick]
-                if sources.shape[2] != target.shape[2]:
-                    raise ValueError('Source and targets do not have the same'
-                                     'number of time slices.')
-        target = target.ravel()
+                if hasattr(target, 'ndim'):
+                    if target.ndim == 3 and min(target.shape) == 1:
+                        target = target.ravel()
 
+        if sources.shape[-1] != target.shape[-1]:
+            raise ValueError('Source and targets do not have the same'
+                             'number of time slices.')
         # auto target selection
         sources, target = _band_pass_filter(self, sources, target, l_freq,
                                             h_freq)
@@ -311,31 +307,33 @@ class ICA(ContainsMixin):
             idx_ecg = []
         if not np.any(idx_ecg):
             ecg, times = _make_ecg(inst, start, stop)
+            ch_name = 'ECG'
         else:
-            if isinstance(inst, _BaseRaw):
-                ecg = inst[idx_ecg, start:stop]
-            elif isinstance(inst, _BaseEpochs):
-                ecg = ch_name
+            ecg = ch_name
         scores = self.scores_sources(inst, target=ecg, score_func='pearsonr',
                                      start=start, stop=stop,
                                      l_freq=l_freq, h_freq=h_freq)
         ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
-        return ecg_idx, scores
+        return ecg_idx, scores.astype(ch_name, np.float64)
 
     @verbose
     def find_bads_eog(self, inst, ch_name=None, threshold=3,
                       start=None, stop=None, l_freq=8, h_freq=16):
 
         eog_inds = _get_eog_channel_index(ch_name, inst)
-        if isinstance(inst, _BaseRaw):
-            eog = [inst[idx, start:stop] for idx in eog_inds]
-        elif isinstance(inst, _BaseEpochs):
-            eog = ch_name
-        scores = self.scores_sources(inst, target=eog, score_func='pearsonr',
-                                     start=start, stop=stop,
-                                     l_freq=l_freq, h_freq=h_freq)
-        ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
-        return ecg_idx, scores
+        eog_chs = [inst.ch_names[k] for k in eog_inds]
+        scores, eog_idx = [], []
+        for eog_ch in eog_chs:
+            scores += [self.scores_sources(inst, target=eog_ch,
+                                           score_func='pearsonr',
+                                           start=start, stop=stop,
+                                           l_freq=l_freq, h_freq=h_freq)]
+            eog_idx += [find_outlier_adaptive(scores[-1], threshold=threshold)]
+        dtype = [(k, np.float) for k in eog_chs]
+        if len(scores) == 1:
+            scores = scores[0]
+        scores = np.array(scores, dtype=dtype)
+        return np.unique(np.c_[eog_idx]), scores
 
     @verbose
     def apply(self, inst, include=None, exclude=None,
@@ -782,10 +780,10 @@ class ICA(ContainsMixin):
         """
         return self._sources_as_epochs(epochs, picks)
 
-    def _sources_as_epochs(self, epochs, picks):
+    def _sources_as_epochs(self, epochs, picks, concatenate):
         """Aux method"""
         out = epochs.copy()
-        sources = self._transform_epochs(epochs)
+        sources = self._transform_epochs(epochs, concatenate)
         if picks is None:
             picks = pick_types(epochs.info, meg=False, eeg=False, misc=True,
                                ecg=True, eog=True, stim=True, exclude='bads')
