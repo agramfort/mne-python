@@ -38,9 +38,6 @@ from .baseline import rescale
 from .utils import (get_subjects_dir, get_config, set_config, _check_subject,
                     logger, verbose, deprecated)
 from .io import show_fiff
-# from .io.base import _BaseRaw
-# from .io.evoked import Evoked
-# from .epochs import _BaseEpochs
 from .constants import FIFF
 from .pick import channel_type, pick_types
 from .io.proj import make_projector, setup_proj
@@ -2016,33 +2013,37 @@ def plot_ica_panel(sources, start=None, stop=None,
 
 def plot_ica_sources(ica, inst, order=None, exclude=None, start=None,
                      stop=None, show=True, title=None):
+    from .io.base import _BaseRaw
+    from .io.evoked import Evoked
+    from .epochs import _BaseEpochs
+
     if exclude is None:
         exclude = ica.exclude
+
     if isinstance(inst, _BaseRaw) or isinstance(inst, _BaseEpochs):
         if isinstance(inst, _BaseRaw):
-            sources = ica._get_sources_raw(inst)
+            sources = ica._get_sources_raw(inst, start, stop)
         else:
             if start is not None or stop is not None:
                 inst = inst.crop(start, stop, copy=True)
-                start, stop = None, None
             sources = ica._get_sources_epochs(inst, concatenate=True)
         if order is not None:
             if np.isscalar(order):
                 order = [order]
             sources = np.atleast_2d(sources[order])
 
-        fig = _plot_ica_grid(sources, start=start, stop=stop,
-                             source_idx=order,
-                             ncol=len(sources) // 10,
+        fig = _plot_ica_grid(sources, start=None, stop=None,
+                             ncol=len(sources) // 10 or 1,
                              exclude=exclude,
                              title=title, show=show)
 
     elif isinstance(inst, Evoked):
+        sources = ica.get_sources(inst)
         if start is not None or stop is not None:
             inst = inst.crop(start, stop, copy=True)
-        evoked_cln = ica.apply(inst)
-        fig = _plot_ica_sources_evoked(evoked=inst, evoked_cln=evoked_cln,
-                                       exclude=exclude, title=title)
+        fig = _plot_ica_sources_evoked(evoked=sources,
+                                       exclude=exclude,
+                                       title=title)
 
     return fig
 
@@ -2107,7 +2108,7 @@ def _plot_ica_grid(sources, start=None, stop=None,
         component = '[%i]' % idx
 
         # plot+ emebed idx and comp. name to use in callback
-        color = 'gray' if idx in exclude else 'reds'
+        color = 'gray' if idx in exclude else 'red'
         line = ax.plot(source, linewidth=0.5, color=color, picker=1e9)[0]
         vars(line)['_mne_src_idx'] = idx
         vars(line)['_mne_component'] = component
@@ -2127,7 +2128,7 @@ def _plot_ica_grid(sources, start=None, stop=None,
     return fig
 
 
-def _plot_ica_sources_evoked(evoked_ica, exclude, title):
+def _plot_ica_sources_evoked(evoked, exclude, title):
     """Plot average over epochs in ICA space
 
     Parameters
@@ -2140,16 +2141,18 @@ def _plot_ica_sources_evoked(evoked_ica, exclude, title):
         The figure title.
     """
     import matplotlib.pyplot as plt
+    if title is None:
+        title = 'Evoked ICA sources'
 
     fig = plt.figure()
-    times = evoked_ica.times * 1e3
+    times = evoked.times * 1e3
 
     # plot unclassified sources
-    plt.plot(times, evoked_ica.data.T, 'k')
+    plt.plot(times, evoked.data.T, 'k')
     for ii in exclude:
         # use indexing to expose event related sources
         color, label = ('r', 'ICA %02d' % ii)
-        plt.plot(times, evoked_ica.data[ii], color='r', label=label)
+        plt.plot(times, evoked.data[ii], color='r', label=label)
 
     plt.title(title)
     plt.xlim(times[[0, -1]])
@@ -2205,18 +2208,30 @@ def plot_ica_scores(ica, scores, exclude=None, axhline=None,
     return fig
 
 
-def plot_ica_overlay(ica, inst, picks=None, start=None, stop=None, title=''):
+def plot_ica_overlay(ica, inst, exclude=None, picks=None, start=None,
+                     stop=None, title=None, show=True):
+    from .io.base import _BaseRaw
+    from .io.evoked import Evoked
+    from .preprocessing.ica import _check_start_stop
+    import matplotlib.pyplot as plt
+    if title is None:
+        title = 'Signals before (red) and after (black) cleaning'
+    if picks is None:
+        picks = [inst.ch_names.index(k) for k in ica.ch_names]
     if isinstance(inst, _BaseRaw):
         if start is None:
             start = 0.0
         if stop is None:
-            stop = 1.5
-        raw_cln = ica.apply(inst, start=start, stop=stop)
-        start_compare, stop_compare = inst.time_as_index([start, stop])
+            stop = 3.0
+        ch_types_used = [k for k in ['mag', 'grad', 'eeg'] if k in ica]
+        start_compare, stop_compare = _check_start_stop(inst, start, stop)
         data, times = inst[picks, start_compare:stop_compare]
-        data_clean, _ = raw_cln[:]
 
-        fig = _plot_ica_overlay_raw(raw=inst, raw_cln=raw_cln, times=times * 1e3)
+        raw_cln = ica.apply(inst, start=start, stop=stop)
+        data_cln, _ = raw_cln[picks, start_compare:stop_compare]
+        fig = _plot_ica_overlay_raw(data=data, data_cln=data_cln,
+                                    times=times * 1e3, title=title,
+                                    ch_types_used=ch_types_used)
     elif isinstance(inst, Evoked):
         if start is not None and stop is not None:
             inst = inst.crop(start, stop, copy=True)
@@ -2228,10 +2243,12 @@ def plot_ica_overlay(ica, inst, picks=None, start=None, stop=None, title=''):
     else:
         raise ValueError('Expected Raw or Evoked objects as input, '
                          'got %s instead' % inst)
+    if show is True:
+        plt.show()
     return fig
 
 
-def _plot_ica_overlay_raw(data, data_cln, times, title):
+def _plot_ica_overlay_raw(data, data_cln, times, title, ch_types_used):
     """Plot evoked after and before ICA cleaning
 
     Parameters
@@ -2249,25 +2266,34 @@ def _plot_ica_overlay_raw(data, data_cln, times, title):
         # Restore sensor space data and keep all PCA components
     # let's now compare the date before and after cleaning.
     # first the raw data
-    fig, ax1, ax2 = plt.subplots(1, 2, sharex=True, sharey=True)
+    assert data.shape == data_cln.shape
+    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+    plt.suptitle(title)
     ax1.plot(times, data.T, color='r')
     ax1.plot(times, data_cln.T, color='k')
     ax1.set_xlabel('time (s)')
     ax1.set_xlim(times[0], times[-1])
-    ax1.show()
+    ax1.set_xlim(times[0], times[-1])
+    ax1.set_title('Raw data')
 
-    # now the affected channel
+    _ch_types = {'mag': 'Magnetometers',
+                 'grad': 'Gradiometers',
+                 'eeg': 'EEG'}
+    ch_types = ', '.join([_ch_types[k] for k in ch_types_used])
+    ax2.set_title('Average across channels ({})'.format(ch_types))
     ax2.plot(times, data.mean(0), color='r')
     ax2.plot(times, data_cln.mean(0), color='k')
     ax2.set_xlim(100, 106)
-    ax1.set_xlabel('time (ms)')
-    ax1.set_xlim(times[0], times[-1])
-    ax2.show()
+    ax2.set_xlabel('time (ms)')
+    ax2.set_xlim(times[0], times[-1])
+    tight_layout(fig=fig)
+    fig.subplots_adjust(top=0.90)
+    fig.canvas.draw()
 
     return fig
 
 
-def _plot_ica_overlay_evoked(evoked, evoked_cln, n_rows):
+def _plot_ica_overlay_evoked(evoked, evoked_cln, title):
     """Plot evoked after and before ICA cleaning
 
     Parameters
@@ -2282,6 +2308,14 @@ def _plot_ica_overlay_evoked(evoked, evoked_cln, n_rows):
     fig : instance of pyplot.Figure
     """
     import matplotlib.pyplot as plt
+    ch_types_used = [c for c in ['mag', 'grad', 'eeg'] if c in evoked]
+    n_rows = len(ch_types_used)
+    ch_types_used_cln = [c for c in ['mag', 'grad', 'eeg'] if
+                         c in evoked_cln]
+
+    if len(ch_types_used) != len(ch_types_used_cln):
+        raise ValueError('Raw and clean evokeds must match. '
+                         'Found different channels.')
 
     fig, axes = plt.subplots(n_rows, 1)
     fig.suptitle('Average artifact before (red) and after (black) ICA)')

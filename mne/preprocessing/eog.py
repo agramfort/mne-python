@@ -4,6 +4,7 @@ from .peak_finder import peak_finder
 from .. import pick_types, pick_channels
 from ..utils import logger, verbose
 from ..filter import band_pass_filter
+from ..epochs import Epochs
 
 
 @verbose
@@ -37,10 +38,8 @@ def find_eog_events(raw, event_id=998, l_freq=1, h_freq=10,
         Events.
     """
 
-    info = raw.info
-
     # Getting EOG Channel
-    eog_inds = _get_eog_channel_indices(ch_name, info, raw)
+    eog_inds = _get_eog_channel_index(ch_name, raw)
     logger.info('EOG channel index for this subject is: %s' % eog_inds)
 
     eog, _ = raw[eog_inds, :]
@@ -95,9 +94,9 @@ def _find_eog_events(eog, event_id, l_freq, h_freq, sampling_rate, first_samp,
     return eog_events
 
 
-def _get_eog_channel_indices(ch_name, info, inst):
+def _get_eog_channel_index(ch_name, inst):
     if ch_name is None:
-        ch_eog = pick_types(info, meg=False, eeg=False, stim=False,
+        ch_eog = pick_types(inst.info, meg=False, eeg=False, stim=False,
                             eog=True, ecg=False, emg=False, ref_meg=False,
                             exclude='bads')
     if len(ch_eog) == 0:
@@ -106,7 +105,7 @@ def _get_eog_channel_indices(ch_name, info, inst):
         eog_inds = pick_channels(inst.ch_names,
                                  include=['EEG 061', 'EEG 062'])
         if len(eog_inds) != 2:
-            raise ValueError('EEG 61 or EEG 62 channel not found !!')
+            raise RuntimeError('EEG 61 or EEG 62 channel not found !!')
     else:
 
         # Check if multiple EOG Channels
@@ -124,3 +123,16 @@ def _get_eog_channel_indices(ch_name, info, inst):
                         " and ".join(ch_name),
                         '' if len(eog_inds) < 2 else 's'))
     return eog_inds
+
+
+def create_eog_epochs(raw, ch_name=None, event_id=998, picks=None,
+                      tmin=-0.5, tmax=0.5):
+
+    events, _, _ = find_eog_events(raw, ch_name=None, event_id=event_id,
+                                   l_freq=8, h_freq=16)
+
+    # create epochs around ECG events
+    eog_epochs = Epochs(raw, events=events, event_id=event_id,
+                        tmin=tmin, tmax=tmax, baseline=None, proj=False,
+                        picks=picks)
+    return eog_epochs

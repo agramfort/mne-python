@@ -4,7 +4,6 @@
 # License: BSD (3-clause)
 
 from ..externals.six import string_types, text_type
-import warnings
 from copy import deepcopy
 from inspect import getargspec, isfunction
 from collections import namedtuple
@@ -18,8 +17,8 @@ from scipy import stats
 from scipy.spatial import distance
 from scipy import linalg
 
-from .ecg import qrs_detector, _get_ecg_channel_index
-from .eog import _find_eog_events
+from .ecg import qrs_detector, _get_ecg_channel_index, _make_ecg
+from .eog import _find_eog_events, _get_eog_channel_index
 
 from ..cov import compute_whitener
 from .. import Covariance
@@ -32,9 +31,9 @@ from ..io.tree import dir_tree_find
 from ..io.open import fiff_open
 from ..io.tag import read_tag
 from ..io.meas_info import write_meas_info, read_meas_info
-# from ..io.base import _BaseRaw
-# from ..io import Evoked
-# from ..epochs import _BaseEpochs
+from ..io.base import _BaseRaw
+from ..io import Evoked
+from ..epochs import _BaseEpochs
 from ..constants import Bunch, FIFF
 from ..viz import (plot_ica_components, plot_ica_scores,
                    plot_ica_sources, plot_ica_overlay)
@@ -241,25 +240,27 @@ class ICA(ContainsMixin):
     def fit(self, inst, picks=None, start=None, stop=None, decim=None,
             reject=None, flat=None, tstep=2.0, verbose=None):
         if isinstance(inst, _BaseRaw):
-            self._fit_raw(self, inst, picks, start, stop, decim, reject, flat,
+            self._fit_raw(inst, picks, start, stop, decim, reject, flat,
                           tstep, verbose)
         elif isinstance(inst, _BaseEpochs):
-            self._fit_epochs(self, inst, picks, decim, verbose)
+            self._fit_epochs(inst, picks, decim, verbose)
         return self
 
     @verbose
-    def get_sources(self, inst, picks, start, stop):
+    def get_sources(self, inst, picks=None, start=None, stop=None):
         if isinstance(inst, _BaseRaw):
             sources = self._sources_as_raw(inst, picks, start, stop)
         elif isinstance(inst, _BaseEpochs):
-            sources = self._sources_as_epochs(inst, picks)
+            sources = self._sources_as_epochs(inst, picks, False)
+        elif isinstance(inst, Evoked):
+            sources = self._sources_as_evoked(inst, picks)
         return sources
 
     @verbose
     def scores_sources(self, inst, target, score_func='pearson', start=None,
                        stop=None, l_freq=None, h_freq=None):
         if isinstance(inst, _BaseRaw):
-            sources = self._get_sources_raw(inst, start, stop)
+            sources = self._transform_raw(inst, start, stop)
             if target is not None:
                 start, stop = _check_start_stop(inst, start, stop)
                 if hasattr(target, 'ndim'):
@@ -272,7 +273,7 @@ class ICA(ContainsMixin):
                     raise ValueError('Source and targets do not have the same'
                                      'number of time slices.')
         elif isinstance(inst, _BaseEpochs):
-            sources = self._get_sources_epochs(inst)
+            sources = self._transform_epochs(inst)
             if target is not None:
                 if hasattr(target, 'ndim'):
                     if target.ndim < 3:
@@ -302,48 +303,38 @@ class ICA(ContainsMixin):
         return scores
 
     @verbose
-    def find_bads_ecg(self, inst, ch_name=None, threshold=3
-                      l_freq=8, h_freq=16):
-
-        idx_ecg = _get_ecg_channel_index(ch_name)
+    def find_bads_ecg(self, inst, ch_name=None, threshold=3,
+                      start=None, stop=None, l_freq=8, h_freq=16):
+        try:
+            idx_ecg = _get_ecg_channel_index(ch_name, inst)
+        except RuntimeError:
+            idx_ecg = []
         if not np.any(idx_ecg):
-            if not any([c in inst for c in ['mag', 'grad']]):
-                raise ValueError('Unable to generate artifical ECG channel')
-            for ch in ['mag', 'grad']:
-                if ch in inst:
-                    break
-            logger.info('Reconstructing ECG signal from {}'
-                        .format({'mag': 'Magnetometers',
-                                 'grad': 'Gradiometers'}[ch]))
-            picks = pick_types(inst.info, meg=ch, eeg=False)
-            ecg = inst[picks, start:stop][0].mean(0)
+            ecg, times = _make_ecg(inst, start, stop)
         else:
             if isinstance(inst, _BaseRaw):
                 ecg = inst[idx_ecg, start:stop]
             elif isinstance(inst, _BaseEpochs):
                 ecg = ch_name
-        scores = self.scores_sources(isnt, target=ecg, score_func='pearsons',
+        scores = self.scores_sources(inst, target=ecg, score_func='pearsonr',
                                      start=start, stop=stop,
                                      l_freq=l_freq, h_freq=h_freq)
-        ecg_idx = finds_outlier_adaptive(scores, threshold=threshold)
+        ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
         return ecg_idx, scores
 
     @verbose
-    def find_bads_eog(self, inst, ch_name=None, threshold=3
-                      l_freq=8, h_freq=16):
+    def find_bads_eog(self, inst, ch_name=None, threshold=3,
+                      start=None, stop=None, l_freq=8, h_freq=16):
 
-        eog_inds = _get_eog_channel_index(ch_name, self.info, inst)
-        if not np.any(eog_inds):
-            raise ValueError('Unable to find EOG channel.')
-        else:
-            if isinstance(inst, _BaseRaw):
-                eog = [inst[idx, start:stop] for idx in eog_inds]
-            elif isinstance(inst, _BaseEpochs):
-                eog = ch_name
-        scores = self.scores_sources(isnt, target=eog, score_func='pearsons',
+        eog_inds = _get_eog_channel_index(ch_name, inst)
+        if isinstance(inst, _BaseRaw):
+            eog = [inst[idx, start:stop] for idx in eog_inds]
+        elif isinstance(inst, _BaseEpochs):
+            eog = ch_name
+        scores = self.scores_sources(inst, target=eog, score_func='pearsonr',
                                      start=start, stop=stop,
                                      l_freq=l_freq, h_freq=h_freq)
-        ecg_idx = finds_outlier_adaptive(scores, threshold=threshold)
+        ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
         return ecg_idx, scores
 
     @verbose
@@ -351,17 +342,17 @@ class ICA(ContainsMixin):
               n_pca_components=None, start=None, stop=None,
               copy=True):
         if isinstance(inst, _BaseRaw):
-            out = self._apply_raw(self, inst=inst, include=include,
+            out = self._apply_raw(raw=inst, include=include,
                                   exclude=exclude,
                                   n_pca_components=n_pca_components,
                                   start=start, stop=stop, copy=copy)
         elif isinstance(inst, _BaseEpochs):
-            out = self._apply_epochs(self, inst=inst, include=include,
+            out = self._apply_epochs(epochs=inst, include=include,
                                      exclude=exclude,
                                      n_pca_components=n_pca_components,
                                      copy=copy)
         elif isinstance(inst, Evoked):
-            out = self._apply_epochs(self, inst=inst, include=include,
+            out = self._apply_evoked(evoked=inst, include=include,
                                      exclude=exclude,
                                      n_pca_components=n_pca_components,
                                      copy=copy)
@@ -553,7 +544,7 @@ class ICA(ContainsMixin):
 
         return self
 
-    def _get_sources(self, data):
+    def _transform(self, data):
         """Compute sources from data (operates inplace)"""
         if self.pca_mean_ is not None:
             data -= self.pca_mean_[:, None]
@@ -585,9 +576,9 @@ class ICA(ContainsMixin):
         sources : array, shape = (n_components, n_times)
             The ICA sources time series.
         """
-        return self._get_sources_raw(raw, start, stop)
+        return self._transform_raw(raw, start, stop)
 
-    def _get_sources_raw(self, raw, start, stop):
+    def _transform_raw(self, raw, start, stop):
         if not hasattr(self, 'mixing_matrix_'):
             raise RuntimeError('No fit available. Please first fit ICA '
                                'decomposition.')
@@ -595,7 +586,7 @@ class ICA(ContainsMixin):
 
         picks = [raw.ch_names.index(k) for k in self.ch_names]
         data, _ = self._pre_whiten(raw[picks, start:stop][0], raw.info, picks)
-        return self._get_sources(data)
+        return self._transform(data)
 
     @deprecated('`get_sources_epochs` is deprecated and will be removed in '
                 'MNE 1.0. Use `get_sources` instead')
@@ -614,9 +605,9 @@ class ICA(ContainsMixin):
         epochs_sources : ndarray of shape (n_epochs, n_sources, n_times)
             The sources for each epoch
         """
-        return self._get_sources_epochs(epochs, concatenate)
+        return self._transform_epochs(epochs, concatenate)
 
-    def _get_sources_epochs(self, epochs, concatenate):
+    def _transform_epochs(self, epochs, concatenate):
         if not hasattr(self, 'mixing_matrix_'):
             raise RuntimeError('No fit available. Please first fit ICA '
                                'decomposition.')
@@ -634,13 +625,26 @@ class ICA(ContainsMixin):
 
         data = np.hstack(epochs.get_data()[:, picks])
         data, _ = self._pre_whiten(data, epochs.info, picks)
-        sources = self._get_sources(data)
+        sources = self._transform(data)
 
         if not concatenate:
             # Put the data back in 3D
             sources = np.array(np.split(sources, len(epochs.events), 1))
 
         return sources
+
+    def _sources_as_evoked(self, evoked, picks):
+        if picks is None:
+            picks = pick_types(evoked.info, include=self.ch_names, exclude=[],
+                               ref_meg=False)
+
+        data = evoked.data[picks]
+        data, _ = self._pre_whiten(data, evoked.info, picks)
+        sources = self._transform(data)
+        out = evoked.copy()
+        out.data = sources
+        out.info = self.info
+        return out
 
     @verbose
     def save(self, fname):
@@ -781,7 +785,7 @@ class ICA(ContainsMixin):
     def _sources_as_epochs(self, epochs, picks):
         """Aux method"""
         out = epochs.copy()
-        sources = self._get_sources_epochs(epochs)
+        sources = self._transform_epochs(epochs)
         if picks is None:
             picks = pick_types(epochs.info, meg=False, eeg=False, misc=True,
                                ecg=True, eog=True, stim=True, exclude='bads')
@@ -835,13 +839,8 @@ class ICA(ContainsMixin):
         -------
         fig : instance of pyplot.Figure
         """
-        if order is not None:
-            if np.isscalar(order):
-                order = [order]
-            sources = sources[order]
-        fig = plot_ica_panel(sources, n_components=n_components,
-                             source_idx=source_idx, ncol=ncol, nrow=nrow,
-                             title=title, show=show)
+        fig = self.plot_sources(inst=raw, source_idx=source_idx, ncol=ncol,
+                                title=title, show=show)
 
         return fig
 
@@ -887,9 +886,11 @@ class ICA(ContainsMixin):
         fig : instance of pyplot.Figure
         """
 
-        return plot_sources()
+        return plot_ica_sources(self, inst=epochs[epoch_idx], order=order,
+                                start=start, stop=stop, ncol=ncol,
+                                source_idx=source_idx)
 
-    def plot_sources(self, inst, order, exclude, title=None, start=None,
+    def plot_sources(self, inst, order=None, exclude=None, start=None,
                      stop=None, show=True, title=None):
         """Plot average over epochs in ICA space
 
@@ -902,10 +903,10 @@ class ICA(ContainsMixin):
             will be used.
         """
 
-        return plot_ica_sources(self, inst, order, exclude, title, start
-                                stop, show, title)
+        return plot_ica_sources(self, inst=inst, order=order, exclude=exclude,
+                                title=title, start=start, stop=stop, show=show)
 
-    def plot_overlay(self, inst, start=None, stop=None, title):
+    def plot_overlay(self, inst, start=None, stop=None, title=None):
         return plot_ica_overlay(self, inst, start=start, stop=stop,
                                 title=title)
 
@@ -953,7 +954,6 @@ class ICA(ContainsMixin):
                                   score_func=score_func,
                                   start=start, stop=stop, l_freq=l_freq,
                                   h_freq=h_freq)
-
 
     @deprecated('`find_sources_epochs` is deprecated and will be removed in '
                 'MNE 1.0. Use `find_bads` instead')
@@ -1144,7 +1144,7 @@ class ICA(ContainsMixin):
 
         return epochs
 
-    def _apply_epochs(self, evoked, include, exclude,
+    def _apply_evoked(self, evoked, include, exclude,
                       n_pca_components, copy):
 
         picks = pick_types(evoked.info, meg=False, ref_meg=False,
@@ -1218,12 +1218,12 @@ class ICA(ContainsMixin):
     def plot_components(self, source_idx, ch_type='mag', res=500, layout=None,
                         vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                         show=True):
-        return plot_ica_topomap(self, source_idx=source_idx,
-                                ch_type=ch_type,
-                                res=res, layout=layout, vmax=vmax,
-                                cmap=cmap,
-                                sensors=sensors, colorbar=colorbar,
-                                show=show)
+        return plot_ica_components(self, source_idx=source_idx,
+                                   ch_type=ch_type,
+                                   res=res, layout=layout, vmax=vmax,
+                                   cmap=cmap,
+                                   sensors=sensors, colorbar=colorbar,
+                                   show=show)
 
     def plot_scores(self, scores, exclude=None, axhline=None,
                     title='ICA component scores', figsize=(12, 6)):
@@ -1247,21 +1247,6 @@ class ICA(ContainsMixin):
         """
         return plot_ica_scores(ica=self, scores=scores, exclude=exclude,
                                axhline=axhline, title=title, figsize=figsize)
-
-    def plot_overlay(self, epochs):
-        """Plot epochs after and before ICA cleaning
-        Parameters
-        ----------
-        epochs : instance of mne.io.Epochs
-            The epochs to be regarded.
-        ica : instance of mne.preprocessing.ICA
-            The ICA object.
-        Returns
-        -------
-        fig : instance of pyplot.Figure
-        """
-
-        return plot_ica_overlay(epochs=epochs, ica=self)
 
     @deprecated('`detect_artifacts` is deprecated and will be removed in '
                 'MNE 1.0. Use `find_bads` instead')
