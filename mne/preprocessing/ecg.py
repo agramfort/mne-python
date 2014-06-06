@@ -259,7 +259,7 @@ def _make_ecg(inst, start, stop, verbose=None):
     for ch in ['mag', 'grad']:
         if ch in inst:
             break
-    logger.info('Reconstructing ECG signal from {}'
+    logger.info('Reconstructing ECG signal from {0}'
                 .format({'mag': 'Magnetometers',
                          'grad': 'Gradiometers'}[ch]))
     picks = pick_types(inst.info, meg=ch, eeg=False)
