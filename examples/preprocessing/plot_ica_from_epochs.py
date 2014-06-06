@@ -3,13 +3,10 @@
 Compute ICA components on epochs
 ================================
 
-ICA is used to decompose raw data in 49 to 50 sources.
-The source matching the ECG is found automatically
-and displayed. Finally, after the cleaned epochs are
-compared to the uncleaned epochs, evoked ICA sources
-are investigated using sensor space ERF plotting
-techniques.
-
+ICA is fit to MEG raw data.
+The sources matching the ECG are automatically found and displayed.
+Subsequently, artefact detection and rejection quality are assessed.
+Finally, the impact on the evoked ERF is visualized.
 """
 print(__doc__)
 
@@ -19,7 +16,7 @@ print(__doc__)
 
 import mne
 from mne.io import Raw
-from mne.preprocessing import ICA, create_eog_epochs
+from mne.preprocessing import ICA, create_ecg_epochs
 from mne.datasets import sample
 
 ###############################################################################
@@ -29,7 +26,7 @@ data_path = sample.data_path()
 raw_fname = data_path + '/MEG/sample/sample_audvis_filt-0-40_raw.fif'
 
 raw = Raw(raw_fname, preload=True)
-picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=True,
+picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=False,
                        ecg=True, stim=False, exclude='bads')
 
 tmin, tmax, event_id = -0.2, 0.5, 1
@@ -38,30 +35,32 @@ epochs = mne.Epochs(raw, events, event_id, tmin, tmax, proj=False, picks=picks,
                     baseline=(None, 0), preload=True, reject=None)
 
 ###############################################################################
-# Fit ICA model
+# 1) Fit ICA model
 
-ica = ICA(n_components=0.99, max_pca_components=None).fit(epochs)
-print(ica)
-
-###############################################################################
-# Find EOG Artifacts
-
-eog_inds, eog_scores = ica.find_bads_eog(epochs, threshold=4)
-
-ica.plot_scores(eog_scores)
-title = 'Sources related to %s artifacts'
-ica.plot_sources(epochs, eog_inds, title=title % 'EOG')
-ica.plot_components(eog_inds, title=title % 'EOG')
-
-ica.exclude.extend(eog_inds)  # mark bad components
+ica = ICA(n_components=0.99).fit(epochs)
 
 ###############################################################################
-# Assess component selection and unmixing quality
+# 2) Find ECG Artifacts
 
-# check EOG
-eog_evoked = create_eog_epochs(raw, picks=picks).average()  # get eog artifacts
-ica.plot_sources(eog_evoked)  # plot eog sources + selection
+ecg_inds, scores = ica.find_bads_ecg(epochs, threshold=3)
+
+ica.plot_scores(scores, exclude=ecg_inds)
+
+title = 'Sources related to %s artifacts (red)'
+order = abs(scores).argsort()[::-1][:5]
+
+ica.plot_sources(epochs, order, exclude=ecg_inds, title=title % 'ECG')
+ica.plot_components(ecg_inds, title=title % 'ECG')
+
+ica.exclude.extend(ecg_inds)  # mark bad components
+
+###############################################################################
+# 3) Assess component selection and unmixing quality
+
+# check ecg
+ecg_evoked = create_ecg_epochs(raw, picks=picks).average()  # get ECG artifacts
+ica.plot_sources(ecg_evoked)  # plot ECG sources + selection
 
 # check ERF
-ica.plot_overlay(eog_evoked)  # plot eog cleaning
+ica.plot_overlay(ecg_evoked)  # plot ecg cleaning
 ica.plot_overlay(epochs.average())  # plot remaining ERF

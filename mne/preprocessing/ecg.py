@@ -166,7 +166,7 @@ def find_ecg_events(raw, event_id=999, ch_name=None, tstart=0.0,
 
         ecg, times = raw[idx_ecg, :]
     except RuntimeError:
-        ecg, times = _make_ecg(raw, None, None)
+        ecg, times = _make_ecg(raw, None, None, verbose)
         idx_ecg = None
 
     # detecting QRS and generating event file
@@ -250,7 +250,8 @@ def create_ecg_epochs(raw, ch_name=None, event_id=999, picks=None,
     return ecg_epochs
 
 
-def _make_ecg(inst, start, stop):
+@verbose
+def _make_ecg(inst, start, stop, verbose=None):
     """Create ECG signal from cross channel average
     """
     if not any([c in inst for c in ['mag', 'grad']]):

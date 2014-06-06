@@ -232,7 +232,7 @@ class ICA(ContainsMixin):
               'no dimension reduction')
         if self.info is not None:
             ch_fit = ['"%s"' % c for c in ['mag', 'grad', 'eeg'] if c in self]
-            s += ', channels used: {}'.format('; '.join(ch_fit))
+            s += ', channels used: {0}'.format('; '.join(ch_fit))
         if self.exclude:
             s += ', %i sources marked for exclusion' % len(self.exclude)
 
@@ -681,8 +681,9 @@ class ICA(ContainsMixin):
         info['bads'] = [ch_names[k] for k in self.exclude]
         info['projs'] = []  # make sure projections are removed.
 
+    @verbose
     def score_sources(self, inst, target, score_func='pearson', start=None,
-                      stop=None, l_freq=None, h_freq=None):
+                      stop=None, l_freq=None, h_freq=None, verbose=None):
         """Assign score to components based on statistic or metric
 
         Parameters
@@ -714,6 +715,9 @@ class ICA(ContainsMixin):
             Low pass frequency.
         h_freq : float
             High pass frequency.
+        verbose : bool, str, int, or None
+            If not None, override default verbose level (see mne.verbose).
+            Defaults to self.verbose.
 
         Returns
         -------
@@ -752,24 +756,19 @@ class ICA(ContainsMixin):
             raise ValueError('Data input must be of Raw or Epochs type')
 
         # auto target selection
+        if verbose is None:
+            verbose = self.verbose
         sources, target = _band_pass_filter(self, sources, target, l_freq,
-                                            h_freq)
+                                            h_freq, verbose)
 
-        return _find_sources(sources, target, score_func)
-
-        # auto target selection
-
-        sources, target = _band_pass_filter(self, sources, target, l_freq,
-                                            h_freq)
-
-        if isinstance(inst, _BaseEpochs):
-            sources = np.hstack(sources)
         scores = _find_sources(sources, target, score_func)
+
         return scores
 
     @verbose
     def find_bads_ecg(self, inst, ch_name=None, threshold=3,
-                      start=None, stop=None, l_freq=8, h_freq=16):
+                      start=None, stop=None, l_freq=8, h_freq=16,
+                      verbose=None):
         """Detect ECG related components using correlation
 
         Detection is based on Pearson correlation between the
@@ -803,31 +802,37 @@ class ICA(ContainsMixin):
         verbose : bool, str, int, or None
             If not None, override default verbose level (see mne.verbose).
             Defaults to self.verbose.
+
         Returns
         -------
         ecg_idx : np.ndarray of int, shape (< ica.n_components_)
             The EOG related components
-        scores : np.ndarray of float, shape  (ica.n_components_)
+        scores : np.ndarray of float, shape (ica.n_components_)
             The correlation scores.
         """
+        if verbose is None:
+            verbose = self.verbose
         try:
             idx_ecg = _get_ecg_channel_index(ch_name, inst)
         except RuntimeError:
             idx_ecg = []
         if not np.any(idx_ecg):
-            ecg, times = _make_ecg(inst, start, stop)
+            if verbose is not None:
+                verbose = self.verbose
+            ecg, times = _make_ecg(inst, start, stop, verbose)
             ch_name = 'ECG'
         else:
             ecg = ch_name
         scores = self.score_sources(inst, target=ecg, score_func='pearsonr',
                                     start=start, stop=stop,
-                                    l_freq=l_freq, h_freq=h_freq)
+                                    l_freq=l_freq, h_freq=h_freq,
+                                    verbose=verbose)
         ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
         return ecg_idx, scores
 
     @verbose
     def find_bads_eog(self, inst, ch_name=None, threshold=3,
-                      start=None, stop=None, l_freq=8, h_freq=16,
+                      start=None, stop=None, l_freq=1, h_freq=10,
                       verbose=None):
         """Detect EOG related components using correlation
 
@@ -860,6 +865,7 @@ class ICA(ContainsMixin):
         verbose : bool, str, int, or None
             If not None, override default verbose level (see mne.verbose).
             Defaults to self.verbose.
+
         Returns
         -------
         ecg_idx : np.ndarray of int, shape (< ica.n_components_)
@@ -867,6 +873,9 @@ class ICA(ContainsMixin):
         scores : np.ndarray of float, shape (ica.n_components_) | list of array
             The correlation scores.
         """
+        if verbose is None:
+            verbose = self.verbose
+
         eog_inds = _get_eog_channel_index(ch_name, inst)
         if len(eog_inds) > 2:
             eog_inds = eog_inds[:1]
@@ -877,7 +886,8 @@ class ICA(ContainsMixin):
             scores += [self.score_sources(inst, target=eog_ch,
                                           score_func='pearsonr',
                                           start=start, stop=stop,
-                                          l_freq=l_freq, h_freq=h_freq)]
+                                          l_freq=l_freq, h_freq=h_freq,
+                                          verbose=verbose)]
             eog_idx += [find_outlier_adaptive(scores[-1], threshold=threshold)]
         eog_idx = np.unique(np.c_[eog_idx])
         if len(scores) == 1:
@@ -2154,14 +2164,18 @@ def run_ica(raw, n_components, max_pca_components=100,
     return ica
 
 
-def _band_pass_filter(ica, sources, target, l_freq, h_freq):
+@verbose
+def _band_pass_filter(ica, sources, target, l_freq, h_freq, verbose=None):
     if l_freq is not None and h_freq is not None:
         logger.info('... filtering ICA sources')
+        # use fft, here, steeper is better here.
         sources = band_pass_filter(sources, ica.info['sfreq'],
-                                   l_freq, h_freq,  method='iir')
+                                   l_freq, h_freq,  method='fft',
+                                   verbose=verbose)
         logger.info('... filtering target')
         target = band_pass_filter(target, ica.info['sfreq'],
-                                  l_freq, h_freq,  method='iir')
+                                  l_freq, h_freq,  method='fft',
+                                  verbose=verbose)
     elif l_freq is not None or h_freq is not None:
         raise ValueError('Must specify both pass bands')
 

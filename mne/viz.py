@@ -1857,7 +1857,7 @@ def plot_source_estimates(stc, subject=None, surface='inflated', hemi='lh',
     return brain
 
 
-def _plot_ica_panel_onpick(event, sources=None, ylims=None):
+def _ica_plot_sources_onpick_(event, sources=None, ylims=None):
     """Onpick callback for plot_ica_panel"""
 
     # make sure that the swipe gesture in OS-X doesn't open many figures
@@ -1870,10 +1870,10 @@ def _plot_ica_panel_onpick(event, sources=None, ylims=None):
         plt.figure()
         src_idx = artist._mne_src_idx
         component = artist._mne_component
-        plt.plot(sources[src_idx], 'r')
+        plt.plot(sources[src_idx], 'r' if artist._mne_is_bad else 'k')
         plt.ylim(ylims)
         plt.grid(linestyle='-', color='gray', linewidth=.25)
-        plt.title(component)
+        plt.title('ICA %i' % component)
     except Exception as err:
         # matplotlib silently ignores exceptions in event handlers, so we print
         # it here to know what went wrong
@@ -1970,6 +1970,8 @@ def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
         ax.set_frame_on(False)
 
     tight_layout(fig=fig)
+    fig.subplots_adjust(top=0.9)
+    fig.canvas.draw()
     if colorbar:
         vmax_ = normalize_colors(vmin=-vmax, vmax=vmax)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=vmax_)
@@ -1981,7 +1983,6 @@ def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
 
     if show is True:
         plt.show()
-    fig.subplots_adjust(top=0.9)
     return fig
 
 
@@ -2072,7 +2073,7 @@ def plot_ica_sources(ica, inst, order=None, exclude=None, start=None,
     if exclude is None:
         exclude = ica.exclude
 
-    if isinstance(inst, _BaseRaw) or isinstance(inst, _BaseEpochs):
+    if isinstance(inst, (_BaseRaw, _BaseEpochs)):
         if isinstance(inst, _BaseRaw):
             sources = ica._transform_raw(inst, start, stop)
         else:
@@ -2084,11 +2085,11 @@ def plot_ica_sources(ica, inst, order=None, exclude=None, start=None,
                 order = [order]
             sources = np.atleast_2d(sources[order])
 
-        fig = _plot_ica_grid(sources, start=None, stop=None,
+        fig = _plot_ica_grid(sources, start=start, stop=stop,
                              ncol=len(sources) // 10 or 1,
                              exclude=exclude,
+                             source_idx=order,
                              title=title, show=show)
-
     elif isinstance(inst, Evoked):
         sources = ica.get_sources(inst)
         if start is not None or stop is not None:
@@ -2102,9 +2103,9 @@ def plot_ica_sources(ica, inst, order=None, exclude=None, start=None,
     return fig
 
 
-def _plot_ica_grid(sources, start=None, stop=None,
-                   source_idx=None, ncol=3, exclude=None, verbose=None,
-                   title=None, show=True):
+def _plot_ica_grid(sources, start, stop,
+                   source_idx, ncol, exclude,
+                   title, show):
     """Create panel plots of ICA sources
 
     Clicking on the plot of an individual source opens a new figure showing
@@ -2126,8 +2127,6 @@ def _plot_ica_grid(sources, start=None, stop=None,
         Number of panel-columns.
     title : str
         The figure title. If None a default is provided.
-    verbose : bool, str, int, or None
-        If not None, override default verbose level (see mne.verbose).
     show : bool
         If True, plot will be shown, else just the figure is returned.
     """
@@ -2135,33 +2134,30 @@ def _plot_ica_grid(sources, start=None, stop=None,
 
     if source_idx is None:
         source_idx = np.arange(len(sources))
-    else:
+    elif isinstance(source_idx, list):
         source_idx = np.array(source_idx)
     if exclude is None:
         exclude = []
 
     n_components = len(sources)
-    sources = sources[source_idx, start:stop]
     ylims = sources.min(), sources.max()
     xlims = np.arange(sources.shape[-1])[[0, -1]]
     fig, axes = _prepare_trellis(n_components, ncol)
     if title is None:
-        fig.suptitle('MEG signal decomposition'
-                     ' -- %i components.' % n_components, size=16)
+        fig.suptitle('Reconstructed latent sources', size=16)
     elif title:
         fig.suptitle(title, size=16)
 
     plt.subplots_adjust(wspace=0.05, hspace=0.05)
-
-    for idx, (ax, source) in enumerate(zip(axes, sources)):
-        ax.grid(linestyle='-', color='gray', linewidth=.25)
-        component = '[%i]' % idx
-
+    my_iter = enumerate(zip(source_idx, axes, sources))
+    for i_source, (i_selection, ax, source) in my_iter:
+        component = '[%i]' % i_selection
         # plot+ emebed idx and comp. name to use in callback
-        color = 'gray' if idx in exclude else 'red'
+        color = 'r' if i_selection in exclude else 'k'
         line = ax.plot(source, linewidth=0.5, color=color, picker=1e9)[0]
-        vars(line)['_mne_src_idx'] = idx
+        vars(line)['_mne_src_idx'] = i_source
         vars(line)['_mne_component'] = component
+        vars(line)['_mne_is_bad'] = i_selection in exclude
         ax.set_xlim(xlims)
         ax.set_ylim(ylims)
         ax.text(0.05, .95, component, transform=ax.transAxes,
@@ -2169,7 +2165,7 @@ def _plot_ica_grid(sources, start=None, stop=None,
         plt.setp(ax.get_xticklabels(), visible=False)
         plt.setp(ax.get_yticklabels(), visible=False)
     # register callback
-    callback = partial(_plot_ica_panel_onpick, sources=sources, ylims=ylims)
+    callback = partial(_ica_plot_sources_onpick_, sources=sources, ylims=ylims)
     fig.canvas.mpl_connect('pick_event', callback)
 
     if show:
@@ -2192,7 +2188,7 @@ def _plot_ica_sources_evoked(evoked, exclude, title):
     """
     import matplotlib.pyplot as plt
     if title is None:
-        title = 'Evoked ICA sources'
+        title = 'Reconstructed latent sources, time-locked'
 
     fig = plt.figure()
     times = evoked.times * 1e3

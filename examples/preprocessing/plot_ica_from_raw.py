@@ -3,13 +3,9 @@
 Compute ICA components on raw data
 ==================================
 
-ICA is used to decompose raw data in 49 to 50 sources.
-The source matching the ECG is found automatically
-and displayed. Subsequently, the cleaned data is compared
-with the uncleaned data. The last section shows how to export
-the sources into a fiff file for further processing and displaying, e.g.
-using mne_browse_raw.
-
+ICA is fit to MEG raw data.
+The sources matching the EOG are automatically found and displayed.
+Subsequently, artefact detection and rejection quality are assessed.
 """
 print(__doc__)
 
@@ -21,7 +17,7 @@ print(__doc__)
 import mne
 from mne.io import Raw
 from mne.preprocessing import ICA
-from mne.preprocessing import create_ecg_epochs
+from mne.preprocessing import create_eog_epochs
 from mne.datasets import sample
 
 ###############################################################################
@@ -49,34 +45,39 @@ ica = ICA(n_components=0.90, max_pca_components=None)
 
 ica.fit(raw, picks=picks, decim=3, reject=dict(mag=4e-12, grad=4000e-13))
 
-bad_inds, scores = ica.find_bads_ecg(raw, threshold=3)
+eog_inds, scores = ica.find_bads_eog(raw, threshold=4)
 
-ica.plot_scores(scores, exclude=bad_inds)  # inspect metrics used
-ica.plot_sources(raw, bad_inds, start=0, stop=3.0)  # show time series
-ica.plot_components(bad_inds, colorbar=False)  # show component sensitivites
+ica.plot_scores(scores, exclude=eog_inds)  # inspect metrics used
 
-ica.exclude += list(bad_inds)  # mark for exclusion
+order = abs(scores).argsort()[::-1][:5]  # indices of top five scores
+
+# detected artifacts drawn in red (via exclude)
+ica.plot_sources(raw, order, exclude=eog_inds, start=0, stop=3.0)
+ica.plot_components(eog_inds, colorbar=False)  # show component sensitivites
+
+ica.exclude += list(eog_inds)  # mark for exclusion
 
 ###############################################################################
-# 3) check detectionr rate and visualize artifact rejection
+# 3) check detection and visualize artifact rejection
 
-ica.plot_overlay(raw)  # check the volume does not change
+# show average EOG in ICA space
+eog_evoked = create_eog_epochs(raw, picks=picks).average()
 
-# show average ECG in ICA space
-ecg_evoked = create_ecg_epochs(raw, picks=picks).average()
+ica.plot_sources(eog_evoked, exclude=eog_inds)
 
-ica.plot_sources(ecg_evoked, exclude=bad_inds)
+# overlay raw and clean EOG fields
+ica.plot_overlay(eog_evoked)
 
-# overlay raw and clean ECG fields
-ica.plot_overlay(ecg_evoked)
+# check the volume does not change
+ica.plot_overlay(raw)  # ECG artifacts remain
 
 ###############################################################################
 # To save an ICA solution you can say:
-# ica.save('my_ica.fif')
+# >>> ica.save('my_ica.fif')
 #
 # You can later restore the session by saying:
 # >>> from mne.preprocessing import read_ica
 # >>> read_ica('my_ica.fif')
 #
-# Apply the ica to Raw, Epochs or Evoked like this:
+# Apply the solution to Raw, Epochs or Evoked like this:
 # >>> ica.apply(epochs, copy=False)

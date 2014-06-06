@@ -131,7 +131,7 @@ def _get_eog_channel_index(ch_name, inst):
 
 @verbose
 def create_eog_epochs(raw, ch_name=None, event_id=998, picks=None,
-                      tmin=-0.5, tmax=0.5, l_freq=1, h_freq=2, verbose=None):
+                      tmin=-0.5, tmax=0.5, l_freq=1, h_freq=10, verbose=None):
     """
     Parameters
     ----------
