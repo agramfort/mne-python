@@ -229,8 +229,9 @@ class ICA(ContainsMixin):
         s += ('%s components' % str(self.n_components_) if
               hasattr(self, 'n_components_') else
               'no dimension reduction')
-        ch_fit = ['"%s"' % c for c in ['mag', 'grad', 'eeg'] if c in self]
-        s += ', channels used: {}'.format('; '.join(ch_fit))
+        if self.info is not None:
+            ch_fit = ['"%s"' % c for c in ['mag', 'grad', 'eeg'] if c in self]
+            s += ', channels used: {}'.format('; '.join(ch_fit))
         if self.exclude:
             s += ', %i sources marked for exclusion' % len(self.exclude)
 
@@ -246,7 +247,6 @@ class ICA(ContainsMixin):
             self._fit_epochs(inst, picks, decim, verbose)
         return self
 
-    @verbose
     def get_sources(self, inst, picks=None, start=None, stop=None):
         if isinstance(inst, _BaseRaw):
             sources = self._sources_as_raw(inst, picks, start, stop)
@@ -256,8 +256,7 @@ class ICA(ContainsMixin):
             sources = self._sources_as_evoked(inst, picks)
         return sources
 
-    @verbose
-    def scores_sources(self, inst, target, score_func='pearson', start=None,
+    def score_sources(self, inst, target, score_func='pearson', start=None,
                        stop=None, l_freq=None, h_freq=None):
         if isinstance(inst, _BaseRaw):
             sources = self._transform_raw(inst, start, stop)
@@ -270,9 +269,9 @@ class ICA(ContainsMixin):
                     pick = _get_target_ch(inst, target)
                     target, _ = inst[pick, start:stop]
 
-            if sources.shape[-1] != target.shape[-1]:
-                raise ValueError('Source and targets do not have the same'
-                                 'number of time slices.')
+                if sources.shape[-1] != target.shape[-1]:
+                    raise ValueError('Source and targets do not have the same'
+                                     'number of time slices.')
 
         elif isinstance(inst, _BaseEpochs):
             sources = self._transform_epochs(inst, concatenate=True)
@@ -284,9 +283,9 @@ class ICA(ContainsMixin):
                     if target.ndim == 3 and min(target.shape) == 1:
                         target = target.ravel()
 
-            if sources.shape[-1] != target.shape[-1]:
-                raise ValueError('Source and targets do not have the same'
-                                 'number of time slices.')
+                if sources.shape[-1] != target.shape[-1]:
+                    raise ValueError('Source and targets do not have the same'
+                                     'number of time slices.')
         # auto target selection
         sources, target = _band_pass_filter(self, sources, target, l_freq,
                                             h_freq)
@@ -315,7 +314,7 @@ class ICA(ContainsMixin):
             ch_name = 'ECG'
         else:
             ecg = ch_name
-        scores = self.scores_sources(inst, target=ecg, score_func='pearsonr',
+        scores = self.score_sources(inst, target=ecg, score_func='pearsonr',
                                      start=start, stop=stop,
                                      l_freq=l_freq, h_freq=h_freq)
         ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
@@ -332,7 +331,7 @@ class ICA(ContainsMixin):
         scores, eog_idx = [], []
         eog_chs = [inst.ch_names[k] for k in eog_inds]
         for eog_ch in eog_chs:  # implement later
-            scores += [self.scores_sources(inst, target=eog_ch,
+            scores += [self.score_sources(inst, target=eog_ch,
                                            score_func='pearsonr',
                                            start=start, stop=stop,
                                            l_freq=l_freq, h_freq=h_freq)]
@@ -341,7 +340,6 @@ class ICA(ContainsMixin):
 
         return eog_idx, scores
 
-    @verbose
     def apply(self, inst, include=None, exclude=None,
               n_pca_components=None, start=None, stop=None,
               copy=True):
@@ -784,7 +782,7 @@ class ICA(ContainsMixin):
         ica_epochs : instance of Epochs
             The epochs in ICA space.
         """
-        return self._sources_as_epochs(epochs, picks)
+        return self._sources_as_epochs(epochs, picks, False)
 
     def _sources_as_epochs(self, epochs, picks, concatenate):
         """Aux method"""
@@ -1076,7 +1074,7 @@ class ICA(ContainsMixin):
 
     @deprecated('`pick_sources_epochs` is deprecated and will be removed in '
                 'MNE 1.0. Use `apply` instead')
-    def pick_sources_epochs(self, epochs, include, exclude=None,
+    def pick_sources_epochs(self, epochs, include=None, exclude=None,
                             n_pca_components=None, copy=True):
         """Recompose epochs
 

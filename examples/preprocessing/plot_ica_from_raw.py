@@ -45,14 +45,11 @@ picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=False,
 ica = ICA(n_components=0.90, max_pca_components=None)
 
 ###############################################################################
-# Fit ICA model and identify bad sources
+# 1) Fit ICA model and identify bad sources
 
-# ica.fit(raw, picks=picks, decim=1, reject=dict(mag=4e-12, grad=4000e-13))
-# ica.save('test-ica.fif')
-from mne.preprocessing import read_ica
-ica = read_ica('test-ica.fif')
+ica.fit(raw, picks=picks, decim=3, reject=dict(mag=4e-12, grad=4000e-13))
 
-bad_inds, scores = ica.find_bads_ecg(raw)
+bad_inds, scores = ica.find_bads_ecg(raw, threshold=3)
 
 ica.plot_scores(scores, exclude=bad_inds)  # inspect metrics used
 ica.plot_sources(raw, bad_inds, start=0, stop=3.0)  # show time series
@@ -61,7 +58,7 @@ ica.plot_components(bad_inds, colorbar=False)  # show component sensitivites
 ica.exclude += list(bad_inds)  # mark for exclusion
 
 ###############################################################################
-# Apply ICA and visualize quality
+# 3) check detectionr rate and visualize artifact rejection
 
 ica.plot_overlay(raw)  # check the volume does not change
 
@@ -73,36 +70,13 @@ ica.plot_sources(ecg_evoked, exclude=bad_inds)
 # overlay raw and clean ECG fields
 ica.plot_overlay(ecg_evoked)
 
-
-picks = mne.pick_types(raw.info, meg=True, eeg=True, exclude='bads')
-# start_compare, stop_compare = raw.time_as_index([0., 3.])
-# data, times = raw[picks, start_compare:stop_compare]
-# raw_cln = ica.apply(raw, start=start_compare, stop=stop_compare)
-# data_cln, _ = raw_cln[picks, start_compare:stop_compare]
-
-# import matplotlib.pyplot as plt
-#     # Restore sensor space data and keep all PCA components
-# # let's now compare the date before and after cleaning.
-# # first the raw data
-# assert data.shape == data_cln.shape
-# fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, sharex=True)
-# ax1.plot(times, data.T, color='r')
-# ax1.plot(times, data_cln.T, color='k')
-# ax1.set_xlabel('time (s)')
-# ax1.set_xlim(times[0], times[-1])
-# ax1.set_xlim(times[0], times[-1])
-# # now the affected channel
-# ax2.plot(times, data.mean(0), color='r')
-# ax2.plot(times, data_cln.mean(0), color='k')
-# ax2.set_xlim(100, 106)
-# ax2.set_xlabel('time (ms)')
-# ax2.set_xlim(times[0], times[-1])
-
-
 ###############################################################################
-# To save an ICA session you can say:
+# To save an ICA solution you can say:
 # ica.save('my_ica.fif')
 #
 # You can later restore the session by saying:
 # >>> from mne.preprocessing import read_ica
 # >>> read_ica('my_ica.fif')
+#
+# Apply the ica to Raw, Epochs or Evoked like this:
+# >>> ica.apply(epochs, copy=False)

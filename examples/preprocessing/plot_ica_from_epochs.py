@@ -60,7 +60,7 @@ ica.exclude.extend(eog_inds)  # mark bad components
 
 # check EOG
 eog_evoked = create_eog_epochs(raw, picks=picks).average()  # get eog artifacts
-ica.plot_sources(eog_evoked)  # plot eog sources
+ica.plot_sources(eog_evoked)  # plot eog sources + selection
 
 # check ERF
 ica.plot_overlay(eog_evoked)  # plot eog cleaning
