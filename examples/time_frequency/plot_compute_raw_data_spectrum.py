@@ -37,7 +37,7 @@ raw.add_proj(projs, remove_existing=True)
 
 
 tmin, tmax = 0, 60  # use the first 60s of data
-fmin, fmax = 2, 50  # look at frequencies between 2 and 300Hz
+fmin, fmax = 2, 300  # look at frequencies between 2 and 300Hz
 n_fft = 2048  # the FFT size (NFFT). Ideally a power of 2
 
 plt.ion()
@@ -49,18 +49,13 @@ raw.plot_psds(area_mode='range', tmax=10.0)
 # Pick MEG magnetometers in the Left-temporal region
 selection = read_selection('Left-temporal')
 picks = mne.pick_types(raw.info, meg='mag', eeg=False, eog=False,
-                       stim=False, exclude='bads', selection=selection)
+                        stim=False, exclude='bads', selection=selection)
 
 # Let's just look at the first few channels for demonstration purposes
 picks = picks[:4]
 
 plt.figure()
 ax = plt.axes()
-raw.plot_psds(tmin=tmin, tmax=tmax, fmin=fmin, fmax=fmax, n_fft=n_fft,
-              n_jobs=1, proj=False, ax=ax, color='gray',  picks=picks)
-
-raw.filter(1, 30, method='iir')
-
 raw.plot_psds(tmin=tmin, tmax=tmax, fmin=fmin, fmax=fmax, n_fft=n_fft,
               n_jobs=1, proj=False, ax=ax, color=(0, 0, 1),  picks=picks)
 
@@ -74,4 +69,4 @@ raw.plot_psds(tmin=tmin, tmax=tmax, fmin=fmin, fmax=fmax, n_fft=n_fft,
               n_jobs=1, proj=True, ax=ax, color=(1, 0, 0), picks=picks)
 
 ax.set_title('Four left-temporal magnetometers')
-plt.legend(['No filter', 'Without SSP', 'With SSP', 'SSP + Notch'])
+plt.legend(['Without SSP', 'With SSP', 'SSP + Notch'])
