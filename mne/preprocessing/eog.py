@@ -129,11 +129,41 @@ def _get_eog_channel_index(ch_name, inst):
     return eog_inds
 
 
+@verbose
 def create_eog_epochs(raw, ch_name=None, event_id=998, picks=None,
-                      tmin=-0.5, tmax=0.5):
+                      tmin=-0.5, tmax=0.5, l_freq=1, h_freq=2, verbose=None):
+    """
+    Parameters
+    ----------
+    raw : instance of Raw
+        The raw data
+    ch_name : str
+        The name of the channel to use for ECG peak detection.
+        The argument is mandatory if the dataset contains no ECG
+        channels.
+    event_id : int
+        The index to assign to found events
+    picks : array-like of int | None (default)
+        Indices of channels to include (if None, all channels
+        are used).
+    tmin : float
+        Start time before event.
+    tmax : float
+        End time after event.
+    l_freq : float
+        Low pass frequency.
+    h_freq : float
+        High pass frequency.
+    verbose : bool, str, int, or None
+        If not None, override default verbose level (see mne.verbose).
 
+    Returns
+    -------
+    ecg_epochs : instance of mne.Epochs
+        Data epoched around ECG r-peaks.
+    """
     events = find_eog_events(raw, ch_name=ch_name, event_id=event_id,
-                             l_freq=1, h_freq=10)
+                             l_freq=l_freq, h_freq=h_freq)
 
     # create epochs around EOG events
     eog_epochs = Epochs(raw, events=events, event_id=event_id,

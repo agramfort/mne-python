@@ -203,20 +203,56 @@ def _get_ecg_channel_index(ch_name, inst):
     return ecg_idx
 
 
+@verbose
 def create_ecg_epochs(raw, ch_name=None, event_id=999, picks=None,
-                      tmin=-0.5, tmax=0.5):
+                      tmin=-0.5, tmax=0.5, l_freq=8, h_freq=16, verbose=None):
+    """Conveniently generate epochs around artifact events
+
+
+    Parameters
+    ----------
+    raw : instance of Raw
+        The raw data
+    ch_name : str
+        The name of the channel to use for ECG peak detection.
+        The argument is mandatory if the dataset contains no ECG
+        channels.
+    event_id : int
+        The index to assign to found events
+    picks : array-like of int | None (default)
+        Indices of channels to include (if None, all channels
+        are used).
+    tmin : float
+        Start time before event.
+    tmax : float
+        End time after event.
+    l_freq : float
+        Low pass frequency.
+    h_freq : float
+        High pass frequency.
+    verbose : bool, str, int, or None
+        If not None, override default verbose level (see mne.verbose).
+
+    Returns
+    -------
+    eog_epochs : instance of mne.Epochs
+        Data epoched around EOG events.
+    """
 
     events, _, _ = find_ecg_events(raw, ch_name=ch_name, event_id=event_id,
-                                   l_freq=8, h_freq=16)
+                                   l_freq=l_freq, h_freq=h_freq,
+                                   verbose=verbose)
 
-    # create epochs around ECG events
+    # create epochs around ECG events and baseline (important)
     ecg_epochs = Epochs(raw, events=events, event_id=event_id,
                         tmin=tmin, tmax=tmax, proj=False,
-                        picks=picks, baseline=(None, 0))  # baseline!
+                        picks=picks, baseline=(None, 0), verbose=verbose)
     return ecg_epochs
 
 
 def _make_ecg(inst, start, stop):
+    """Create ECG signal from cross channel average
+    """
     if not any([c in inst for c in ['mag', 'grad']]):
         raise ValueError('Unable to generate artifical ECG channel')
     for ch in ['mag', 'grad']:

@@ -1885,6 +1885,10 @@ def _plot_ica_panel_onpick(event, sources=None, ylims=None):
 def plot_ica_topomap(ica, source_idx, ch_type='mag', res=500, layout=None,
                      vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                      show=True):
+    """This functoin is deprecated
+
+    See ``plot_ica_components``.
+    """
     return plot_ica_components(ica, source_idx, ch_type, res, layout,
                                vmax, cmap, sensors, colorbar)
 
@@ -1892,35 +1896,40 @@ def plot_ica_topomap(ica, source_idx, ch_type='mag', res=500, layout=None,
 def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
                         vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                         title=None, show=True):
-    """ Plot topographic map from ICA component.
+    """Project unmixing matrix on interpolated sensor topogrpahy.
 
     Parameters
     ----------
-    ica : instance of mne.prerocessing.ICA
-        The ica object to plot from.
+    ica : instance of mne.preprocessing.ICA
+        The ICA solution.
     source_idx : int | array-like
         The indices of the sources to be plotted.
     ch_type : 'mag' | 'grad' | 'planar1' | 'planar2' | 'eeg'
-        The channel type to plot. For 'grad', the gradiometers are collected in
-        pairs and the RMS for each pair is plotted.
+        The channel type to plot. For 'grad', the gradiometers are
+        collected in pairs and the RMS for each pair is plotted.
     layout : None | Layout
         Layout instance specifying sensor positions (does not need to
         be specified for Neuromag data). If possible, the correct layout is
         inferred from the data.
     vmax : scalar
-        The value specfying the range of the color scale (-vmax to +vmax). If
-        None, the largest absolute value in the data is used.
+        The value specfying the range of the color scale (-vmax to +vmax).
+        If None, the largest absolute value in the data is used.
     cmap : matplotlib colormap
         Colormap.
     sensors : bool | str
-        Add markers for sensor locations to the plot. Accepts matplotlib plot
-        format string (e.g., 'r+' for red plusses).
+        Add markers for sensor locations to the plot. Accepts matplotlib
+        plot format string (e.g., 'r+' for red plusses).
     colorbar : bool
         Plot a colorbar.
     res : int
         The resolution of the topomap image (n pixels along each side).
     show : bool
         Call pyplot.show() at the end.
+
+    Returns
+    -------
+    fig : instance of matplotlib.pyplot.Figure
+        The figure object.
     """
     import matplotlib.pyplot as plt
 
@@ -2016,6 +2025,45 @@ def plot_ica_panel(sources, start=None, stop=None,
 
 def plot_ica_sources(ica, inst, order=None, exclude=None, start=None,
                      stop=None, show=True, title=None):
+    """Plot estimated latent sources given the unmixing matrix.
+
+    Typical usecases:
+
+    1. plot evolution of latent sources over time based on (Raw input)
+    2. plot latent source around event related time windows (Epochs input)
+    3. plot time-locking in ICA space (Evoked input)
+
+
+    Parameters
+    ----------
+    ica : instance of mne.preprocessing.ICA
+        The ICA solution.
+    inst : instance of mne.io.Raw, mne.Epochs, mne.io.Evoked
+        The object to plot the sources from.
+    order : ndarray | None.
+        Index of length `n_components_`. If None, plot will show the
+        sources in the order as fitted.
+        Example::
+
+            arg_sort = np.argsort(np.var(sources)).
+    start : int
+        X-axis start index. If None from the beginning.
+    stop : int
+        X-axis stop index. If None to the end.
+    exclude : array_like of int
+        The components marked for exclusion. If None (default), ICA.exclude
+        will be used.
+    title : str | None
+        The figure title. If None a default is provided.
+    show : bool
+        If True, plot will be shown, else just the figure is returned.
+
+    Returns
+    -------
+    fig : instance of pyplot.Figure
+        The figure.
+    """
+
     from .io.base import _BaseRaw
     from .io.evoked import Evoked
     from .epochs import _BaseEpochs
@@ -2079,10 +2127,6 @@ def _plot_ica_grid(sources, start=None, stop=None,
         If not None, override default verbose level (see mne.verbose).
     show : bool
         If True, plot will be shown, else just the figure is returned.
-
-    Returns
-    -------
-    fig : instance of pyplot.Figure
     """
     import matplotlib.pyplot as plt
 
@@ -2169,13 +2213,16 @@ def _plot_ica_sources_evoked(evoked, exclude, title):
 def plot_ica_scores(ica, scores, exclude=None, axhline=None,
                     title='ICA component scores',
                     figsize=(12, 6)):
-    """Plot scores and detected components
+    """Plot scores related to detected components.
+
+    Use this function to asses how well your score describes outlier
+    sources and how well you were detecting them.
 
     Parameters
     ----------
     ica : instance of mne.preprocessing.ICA
         The ICA object.
-    scores : array_like of float, shape (n ica components)
+    scores : array_like of float, shape (n ica components) | list of arrays
         Scores based on arbitrary metric to characterize ICA components.
     exclude : array_like of int
         The components marked for exclusion. If None (default), ICA.exclude
@@ -2186,6 +2233,11 @@ def plot_ica_scores(ica, scores, exclude=None, axhline=None,
         The figure title.
     figsize : tuple of int
         The figure size. Defaults to (12, 6)
+
+    Returns
+    -------
+    fig : instance of matplotlib.pyplot.Figure
+        The figure object
     """
     import matplotlib.pyplot as plt
     n_rows = len(scores)
@@ -2220,6 +2272,32 @@ def plot_ica_scores(ica, scores, exclude=None, axhline=None,
 
 def plot_ica_overlay(ica, inst, exclude=None, picks=None, start=None,
                      stop=None, title=None, show=True):
+    """Overlay of raw and cleaned signals given the unmixing matrix.
+
+    This method helps visualizing signal quality and arficat rejection.
+
+    Parameters
+    ----------
+    inst : instance of mne.io.Raw or mne.io.Evoked
+        The signals to be compared given the ICA solution. If Raw input,
+        The raw data are displayed before and after cleaning. In a second
+        panel the cross channel average will be displayed. Since dipolar
+        sources will be canceled out this display is sensitive to
+        artifacts. If evoked input, butterfly plots for clean and raw
+        signals will be superimposed.
+    start : int
+        X-axis start index. If None from the beginning.
+    stop : int
+        X-axis stop index. If None to the end.
+    title : str
+        The figure title.
+
+    Returns
+    -------
+        fig : instance of pyplot.Figure
+        The figure.
+    """
+    # avoid circular imports
     from .io.base import _BaseRaw
     from .io.evoked import Evoked
     from .preprocessing.ica import _check_start_stop

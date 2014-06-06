@@ -292,148 +292,9 @@ class ICA(ContainsMixin):
                           tstep, verbose)
         elif isinstance(inst, _BaseEpochs):
             self._fit_epochs(inst, picks, decim, verbose)
-        return self
-
-    def get_sources(self, inst, picks=None, start=None, stop=None):
-        """Estimate sources given the unmixing matrix
-
-        This method will return the sources in the container format passed.
-        Typical usecases:
-
-        1. pass raw oject to use `raw.plot` for ICA sources
-        2. pass epochs object to compute trial-based statistics in ICA space
-        3. pass evoked object to investigate time-locking in ICA space
-
-        Parameters
-        ----------
-        inst : instance of mne.io.Raw, mne.Epochs or mne.Evoked
-            Object to compute sources from and to represent sources in.
-        picks : array-like of int
-            Channels to be included. This selection remains throughout the
-            initialized ICA session. If None only good data channels are used.
-        start : int | float | None
-            First sample to include. If float, data will be interpreted as
-            time in seconds. If None, the entire data will be used.
-        stop : int | float | None
-            Last sample to not include. If float, data will be interpreted as
-            time in seconds. If None, the entire data will be used.
-
-        Returns
-        -------
-        sources : instance of mne.io.Raw, mne.Epochs or mne.Evoked
-            The ICA sources time series.
-        """
-        if isinstance(inst, _BaseRaw):
-            sources = self._sources_as_raw(inst, picks, start, stop)
-        elif isinstance(inst, _BaseEpochs):
-            sources = self._sources_as_epochs(inst, picks, False)
-        elif isinstance(inst, Evoked):
-            sources = self._sources_as_evoked(inst, picks)
-        return sources
-
-    def score_sources(self, inst, target, score_func='pearson', start=None,
-                      stop=None, l_freq=None, h_freq=None):
-        if isinstance(inst, _BaseRaw):
-            sources = self._transform_raw(inst, start, stop)
-            if target is not None:
-                start, stop = _check_start_stop(inst, start, stop)
-                if hasattr(target, 'ndim'):
-                    if target.ndim < 2:
-                        target = target.reshape(1, target.shape[-1])
-                if isinstance(target, string_types):
-                    pick = _get_target_ch(inst, target)
-                    target, _ = inst[pick, start:stop]
-
-                if sources.shape[-1] != target.shape[-1]:
-                    raise ValueError('Source and targets do not have the same'
-                                     'number of time slices.')
-
-        elif isinstance(inst, _BaseEpochs):
-            sources = self._transform_epochs(inst, concatenate=True)
-            if target is not None:
-                if isinstance(target, string_types):
-                    pick = _get_target_ch(inst, target)
-                    target = inst.get_data()[:, pick]
-                if hasattr(target, 'ndim'):
-                    if target.ndim == 3 and min(target.shape) == 1:
-                        target = target.ravel()
-
-                if sources.shape[-1] != target.shape[-1]:
-                    raise ValueError('Source and targets do not have the same'
-                                     'number of time slices.')
-        # auto target selection
-        sources, target = _band_pass_filter(self, sources, target, l_freq,
-                                            h_freq)
-
-        return _find_sources(sources, target, score_func)
-
-        # auto target selection
-
-        sources, target = _band_pass_filter(self, sources, target, l_freq,
-                                            h_freq)
-
-        if isinstance(inst, _BaseEpochs):
-            sources = np.hstack(sources)
-        scores = _find_sources(sources, target, score_func)
-        return scores
-
-    @verbose
-    def find_bads_ecg(self, inst, ch_name=None, threshold=3,
-                      start=None, stop=None, l_freq=8, h_freq=16):
-        try:
-            idx_ecg = _get_ecg_channel_index(ch_name, inst)
-        except RuntimeError:
-            idx_ecg = []
-        if not np.any(idx_ecg):
-            ecg, times = _make_ecg(inst, start, stop)
-            ch_name = 'ECG'
         else:
-            ecg = ch_name
-        scores = self.score_sources(inst, target=ecg, score_func='pearsonr',
-                                    start=start, stop=stop,
-                                    l_freq=l_freq, h_freq=h_freq)
-        ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
-        return ecg_idx, [scores]
-
-    @verbose
-    def find_bads_eog(self, inst, ch_name=None, threshold=3,
-                      start=None, stop=None, l_freq=8, h_freq=16, verbose=None):
-
-        eog_inds = _get_eog_channel_index(ch_name, inst)
-        if len(eog_inds) > 2:
-            eog_inds = eog_inds[:1]
-            logger.info('Using EOG channel %s' % inst.ch_names[eog_inds[0]])
-        scores, eog_idx = [], []
-        eog_chs = [inst.ch_names[k] for k in eog_inds]
-        for eog_ch in eog_chs:  # implement later
-            scores += [self.score_sources(inst, target=eog_ch,
-                                          score_func='pearsonr',
-                                          start=start, stop=stop,
-                                          l_freq=l_freq, h_freq=h_freq)]
-            eog_idx += [find_outlier_adaptive(scores[-1], threshold=threshold)]
-        eog_idx = np.unique(np.c_[eog_idx])
-
-        return eog_idx, scores
-
-    def apply(self, inst, include=None, exclude=None,
-              n_pca_components=None, start=None, stop=None,
-              copy=True):
-        if isinstance(inst, _BaseRaw):
-            out = self._apply_raw(raw=inst, include=include,
-                                  exclude=exclude,
-                                  n_pca_components=n_pca_components,
-                                  start=start, stop=stop, copy=copy)
-        elif isinstance(inst, _BaseEpochs):
-            out = self._apply_epochs(epochs=inst, include=include,
-                                     exclude=exclude,
-                                     n_pca_components=n_pca_components,
-                                     copy=copy)
-        elif isinstance(inst, Evoked):
-            out = self._apply_evoked(evoked=inst, include=include,
-                                     exclude=exclude,
-                                     n_pca_components=n_pca_components,
-                                     copy=copy)
-        return out
+            raise ValueError('Data input must be of Raw or Epochs type')
+        return self
 
     def _fit_raw(self, raw, picks, start, stop, decim, reject, flat, tstep,
                  verbose):
@@ -539,6 +400,141 @@ class ICA(ContainsMixin):
 
         return self
 
+    def _pre_whiten(self, data, info, picks):
+        """Aux function"""
+        info = pick_info(deepcopy(info), picks)
+        has_pre_whitener = hasattr(self, '_pre_whitener')
+        if not has_pre_whitener and self.noise_cov is None:
+            # use standardization as whitener
+            # Scale (z-score) the data by channel type
+            pre_whitener = np.empty([len(data), 1])
+            for ch_type in ['mag', 'grad', 'eeg']:
+                if _contains_ch_type(info, ch_type):
+                    if ch_type == 'eeg':
+                        this_picks = pick_types(info, meg=False, eeg=True)
+                    else:
+                        this_picks = pick_types(info, meg=ch_type, eeg=False)
+                    pre_whitener[this_picks] = np.std(data[this_picks])
+            data /= pre_whitener
+        elif not has_pre_whitener and self.noise_cov is not None:
+            ncov = deepcopy(self.noise_cov)
+            if data.shape[0] != ncov['data'].shape[0]:
+                ncov['data'] = ncov['data'][picks][:, picks]
+                assert data.shape[0] == ncov['data'].shape[0]
+
+            pre_whitener, _ = compute_whitener(ncov, info, picks)
+            data = fast_dot(pre_whitener, data)
+        elif has_pre_whitener and self.noise_cov is None:
+            data /= self._pre_whitener
+            pre_whitener = self._pre_whitener
+        else:
+            data = fast_dot(self._pre_whitener, data)
+            pre_whitener = self._pre_whitener
+
+        return data, pre_whitener
+
+    def _fit(self, data, max_pca_components, fit_type):
+        """Aux function """
+        from sklearn.decomposition import RandomizedPCA
+
+        # XXX fix copy==True later. Bug in sklearn, see PR #2273
+        pca = RandomizedPCA(n_components=max_pca_components, whiten=True,
+                            copy=True)
+
+        if isinstance(self.n_components, float):
+            # compute full feature variance before doing PCA
+            full_var = np.var(data, axis=1).sum()
+
+        data = pca.fit_transform(data.T)
+
+        if isinstance(self.n_components, float):
+            logger.info('Selecting PCA components by explained variance.')
+            # compute eplained variance manually, cf. sklearn bug
+            # fixed in #2664
+            explained_variance_ratio_ = pca.explained_variance_ / full_var
+            n_components_ = np.sum(explained_variance_ratio_.cumsum()
+                                   <= self.n_components)
+            if n_components_ < 1:
+                raise RuntimeError('One PCA component captures most of the '
+                                   'explained variance, your threshold resu'
+                                   'lts in 0 components. You should select '
+                                   'a higher value.')
+            sel = slice(n_components_)
+        else:
+            logger.info('Selecting PCA components by number.')
+            if self.n_components is not None:  # normal n case
+                sel = slice(self.n_components)
+            else:  # None case
+                logger.info('Using all PCA components.')
+                sel = slice(len(pca.components_))
+
+        # the things to store for PCA
+        self.pca_mean_ = pca.mean_
+        self.pca_components_ = pca.components_
+        # unwhiten pca components and put scaling in unmixintg matrix later.
+        self.pca_explained_variance_ = exp_var = pca.explained_variance_
+        self.pca_components_ *= np.sqrt(exp_var[:, None])
+        del pca
+        # update number of components
+        self.n_components_ = sel.stop
+        if self.n_pca_components is not None:
+            if self.n_pca_components > len(self.pca_components_):
+                self.n_pca_components = len(self.pca_components_)
+
+        # Take care of ICA
+        from sklearn.decomposition import FastICA  # to avoid strong dep.
+        ica = FastICA(algorithm=self.algorithm, fun=self.fun,
+                      fun_args=self.fun_args, whiten=False,
+                      random_state=self.random_state)
+        ica.fit(data[:, sel])
+
+        # get unmixing and add scaling
+        self.unmixing_matrix_ = getattr(ica, 'components_', 'unmixing_matrix_')
+        self.unmixing_matrix_ /= np.sqrt(exp_var[sel])[None, :]
+        self.mixing_matrix_ = linalg.pinv(self.unmixing_matrix_)
+        self.current_fit = fit_type
+
+    def get_sources(self, inst, picks=None, start=None, stop=None):
+        """Estimate sources given the unmixing matrix
+
+        This method will return the sources in the container format passed.
+        Typical usecases:
+
+        1. pass raw oject to use `raw.plot` for ICA sources
+        2. pass epochs object to compute trial-based statistics in ICA space
+        3. pass evoked object to investigate time-locking in ICA space
+
+        Parameters
+        ----------
+        inst : instance of mne.io.Raw, mne.Epochs or mne.Evoked
+            Object to compute sources from and to represent sources in.
+        picks : array-like of int
+            Channels to be included. This selection remains throughout the
+            initialized ICA session. If None only good data channels are used.
+        start : int | float | None
+            First sample to include. If float, data will be interpreted as
+            time in seconds. If None, the entire data will be used.
+        stop : int | float | None
+            Last sample to not include. If float, data will be interpreted as
+            time in seconds. If None, the entire data will be used.
+
+        Returns
+        -------
+        sources : instance of mne.io.Raw, mne.Epochs or mne.Evoked
+            The ICA sources time series.
+        """
+        if isinstance(inst, _BaseRaw):
+            sources = self._sources_as_raw(inst, picks, start, stop)
+        elif isinstance(inst, _BaseEpochs):
+            sources = self._sources_as_epochs(inst, picks, False)
+        elif isinstance(inst, Evoked):
+            sources = self._sources_as_evoked(inst, picks)
+        else:
+            raise ValueError('Data input must be of Raw, Epochs or Evoked '
+                             'type')
+
+        return sources
+
     def _transform(self, data):
         """Compute sources from data (operates inplace)"""
         if self.pca_mean_ is not None:
@@ -588,49 +584,6 @@ class ICA(ContainsMixin):
 
         return sources
 
-    def _sources_as_evoked(self, evoked, picks):
-        """Aux method
-        """
-        if picks is None:
-            picks = pick_types(evoked.info, include=self.ch_names, exclude=[],
-                               ref_meg=False)
-
-        data = evoked.data[picks]
-        data, _ = self._pre_whiten(data, evoked.info, picks)
-        sources = self._transform(data)
-        out = evoked.copy()
-        out.data = sources
-        out.info = self.info
-        return out
-
-    @verbose
-    def save(self, fname):
-        """Store ICA solution into a fiff file.
-
-        Parameters
-        ----------
-        fname : str
-            The absolute path of the file name to save the ICA session into.
-            The file name should end with -ica.fif or -ica.fif.gz.
-        """
-        if self.current_fit == 'unfitted':
-            raise RuntimeError('No fit available. Please first fit ICA '
-                               'decomposition.')
-
-        check_fname(fname, 'ICA', ('-ica.fif', '-ica.fif.gz'))
-
-        logger.info('Wrting ica session to %s...' % fname)
-        fid = start_file(fname)
-
-        try:
-            _write_ica(fid, self)
-        except Exception as inst:
-            os.remove(fname)
-            raise inst
-        end_file(fid)
-
-        return self
-
     def _sources_as_raw(self, raw, picks, start, stop):
         """Aux method
         """
@@ -667,6 +620,39 @@ class ICA(ContainsMixin):
 
         return out
 
+    def _sources_as_epochs(self, epochs, picks, concatenate):
+        """Aux method"""
+        out = epochs.copy()
+        sources = self._transform_epochs(epochs, concatenate)
+        if picks is None:
+            picks = pick_types(epochs.info, meg=False, eeg=False, misc=True,
+                               ecg=True, eog=True, stim=True, exclude='bads')
+
+        out._data = np.concatenate([sources, epochs.get_data()[:, picks]],
+                                   axis=1) if len(picks) > 0 else sources
+
+        self._export_info(out.info, epochs, picks)
+        out.preload = True
+        out.raw = None
+        out._projector = None
+
+        return out
+
+    def _sources_as_evoked(self, evoked, picks):
+        """Aux method
+        """
+        if picks is None:
+            picks = pick_types(evoked.info, include=self.ch_names, exclude=[],
+                               ref_meg=False)
+
+        data = evoked.data[picks]
+        data, _ = self._pre_whiten(data, evoked.info, picks)
+        sources = self._transform(data)
+        out = evoked.copy()
+        out.data = sources
+        out.info = self.info
+        return out
+
     def _export_info(self, info, container, picks):
         """Aux method
         """
@@ -695,22 +681,114 @@ class ICA(ContainsMixin):
         info['bads'] = [ch_names[k] for k in self.exclude]
         info['projs'] = []  # make sure projections are removed.
 
-    def _sources_as_epochs(self, epochs, picks, concatenate):
-        """Aux method"""
-        out = epochs.copy()
-        sources = self._transform_epochs(epochs, concatenate)
-        if picks is None:
-            picks = pick_types(epochs.info, meg=False, eeg=False, misc=True,
-                               ecg=True, eog=True, stim=True, exclude='bads')
+    def score_sources(self, inst, target, score_func='pearson', start=None,
+                      stop=None, l_freq=None, h_freq=None):
+        if isinstance(inst, _BaseRaw):
+            sources = self._transform_raw(inst, start, stop)
+            if target is not None:
+                start, stop = _check_start_stop(inst, start, stop)
+                if hasattr(target, 'ndim'):
+                    if target.ndim < 2:
+                        target = target.reshape(1, target.shape[-1])
+                if isinstance(target, string_types):
+                    pick = _get_target_ch(inst, target)
+                    target, _ = inst[pick, start:stop]
 
-        out._data = np.concatenate([sources, epochs.get_data()[:, picks]],
-                                   axis=1) if len(picks) > 0 else sources
+                if sources.shape[-1] != target.shape[-1]:
+                    raise ValueError('Source and targets do not have the same'
+                                     'number of time slices.')
 
-        self._export_info(out.info, epochs, picks)
-        out.preload = True
-        out.raw = None
-        out._projector = None
+        elif isinstance(inst, _BaseEpochs):
+            sources = self._transform_epochs(inst, concatenate=True)
+            if target is not None:
+                if isinstance(target, string_types):
+                    pick = _get_target_ch(inst, target)
+                    target = inst.get_data()[:, pick]
+                if hasattr(target, 'ndim'):
+                    if target.ndim == 3 and min(target.shape) == 1:
+                        target = target.ravel()
 
+                if sources.shape[-1] != target.shape[-1]:
+                    raise ValueError('Source and targets do not have the same'
+                                     'number of time slices.')
+        else:
+            raise ValueError('Data input must be of Raw or Epochs type')
+
+        # auto target selection
+        sources, target = _band_pass_filter(self, sources, target, l_freq,
+                                            h_freq)
+
+        return _find_sources(sources, target, score_func)
+
+        # auto target selection
+
+        sources, target = _band_pass_filter(self, sources, target, l_freq,
+                                            h_freq)
+
+        if isinstance(inst, _BaseEpochs):
+            sources = np.hstack(sources)
+        scores = _find_sources(sources, target, score_func)
+        return scores
+
+    @verbose
+    def find_bads_ecg(self, inst, ch_name=None, threshold=3,
+                      start=None, stop=None, l_freq=8, h_freq=16):
+        try:
+            idx_ecg = _get_ecg_channel_index(ch_name, inst)
+        except RuntimeError:
+            idx_ecg = []
+        if not np.any(idx_ecg):
+            ecg, times = _make_ecg(inst, start, stop)
+            ch_name = 'ECG'
+        else:
+            ecg = ch_name
+        scores = self.score_sources(inst, target=ecg, score_func='pearsonr',
+                                    start=start, stop=stop,
+                                    l_freq=l_freq, h_freq=h_freq)
+        ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
+        return ecg_idx, [scores]
+
+    @verbose
+    def find_bads_eog(self, inst, ch_name=None, threshold=3,
+                      start=None, stop=None, l_freq=8, h_freq=16, verbose=None):
+
+        eog_inds = _get_eog_channel_index(ch_name, inst)
+        if len(eog_inds) > 2:
+            eog_inds = eog_inds[:1]
+            logger.info('Using EOG channel %s' % inst.ch_names[eog_inds[0]])
+        scores, eog_idx = [], []
+        eog_chs = [inst.ch_names[k] for k in eog_inds]
+        for eog_ch in eog_chs:  # implement later
+            scores += [self.score_sources(inst, target=eog_ch,
+                                          score_func='pearsonr',
+                                          start=start, stop=stop,
+                                          l_freq=l_freq, h_freq=h_freq)]
+            eog_idx += [find_outlier_adaptive(scores[-1], threshold=threshold)]
+        eog_idx = np.unique(np.c_[eog_idx])
+
+        return eog_idx, scores
+
+    def apply(self, inst, include=None, exclude=None,
+              n_pca_components=None, start=None, stop=None,
+              copy=True):
+        if isinstance(inst, _BaseRaw):
+            out = self._apply_raw(raw=inst, include=include,
+                                  exclude=exclude,
+                                  n_pca_components=n_pca_components,
+                                  start=start, stop=stop, copy=copy)
+        elif isinstance(inst, _BaseEpochs):
+            out = self._apply_epochs(epochs=inst, include=include,
+                                     exclude=exclude,
+                                     n_pca_components=n_pca_components,
+                                     copy=copy)
+        elif isinstance(inst, Evoked):
+            out = self._apply_evoked(evoked=inst, include=include,
+                                     exclude=exclude,
+                                     n_pca_components=n_pca_components,
+                                     copy=copy)
+        else:
+            raise ValueError('Data input must be of Raw, Epochs or Evoked '
+                             'type')
         return out
 
     def _apply_raw(self, raw, include, exclude, n_pca_components, start, stop,
@@ -819,6 +897,83 @@ class ICA(ContainsMixin):
 
         return evoked
 
+    def _picks_sources(self, data, include, exclude):
+        """Aux function"""
+        if exclude is None:
+            exclude = self.exclude
+        else:
+            exclude = self.exclude = list(set(self.exclude + list(exclude)))
+
+        _n_pca_comp = _check_n_pca_components(self, self.n_pca_components,
+                                              self.verbose)
+
+        if not(self.n_components_ <= _n_pca_comp <= self.max_pca_components):
+            raise ValueError('n_pca_components must be between '
+                             'n_components and max_pca_components.')
+
+        n_components = self.n_components_
+
+        # Apply first PCA
+        if self.pca_mean_ is not None:
+            data -= self.pca_mean_[:, None]
+
+        pca_data = fast_dot(self.pca_components_, data)
+        # Apply unmixing to low dimension PCA
+        sources = fast_dot(self.unmixing_matrix_, pca_data[:n_components])
+
+        if include not in (None, []):
+            mask = np.ones(len(sources), dtype=np.bool)
+            mask[np.unique(include)] = False
+            sources[mask] = 0.
+        elif exclude not in (None, []):
+            sources[np.unique(exclude)] = 0.
+
+        pca_data[:n_components] = fast_dot(self.mixing_matrix_, sources)
+        data = fast_dot(self.pca_components_[:n_components].T,
+                        pca_data[:n_components])
+        if self.n_pca_components is not None and _n_pca_comp > n_components:
+            data += fast_dot(self.pca_components_[n_components:_n_pca_comp].T,
+                             pca_data[n_components:_n_pca_comp])
+
+        if self.pca_mean_ is not None:
+            data += self.pca_mean_[:, None]
+
+        # restore scaling
+        if self.noise_cov is None:  # revert standardization
+            data *= self._pre_whitener
+        else:
+            data = fast_dot(linalg.pinv(self._pre_whitener), data)
+
+        return data
+
+    @verbose
+    def save(self, fname):
+        """Store ICA solution into a fiff file.
+
+        Parameters
+        ----------
+        fname : str
+            The absolute path of the file name to save the ICA session into.
+            The file name should end with -ica.fif or -ica.fif.gz.
+        """
+        if self.current_fit == 'unfitted':
+            raise RuntimeError('No fit available. Please first fit ICA '
+                               'decomposition.')
+
+        check_fname(fname, 'ICA', ('-ica.fif', '-ica.fif.gz'))
+
+        logger.info('Wrting ica session to %s...' % fname)
+        fid = start_file(fname)
+
+        try:
+            _write_ica(fid, self)
+        except Exception as inst:
+            os.remove(fname)
+            raise inst
+        end_file(fid)
+
+        return self
+
     def plot_components(self, source_idx, ch_type='mag', res=500, layout=None,
                         vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                         title=None, show=True):
@@ -913,8 +1068,6 @@ class ICA(ContainsMixin):
 
         Parameters
         ----------
-        ica : instance of mne.preprocessing.ICA
-            The ICA object.
         scores : array_like of float, shape (n ica components) | list of arrays
             Scores based on arbitrary metric to characterize ICA components.
         exclude : array_like of int
@@ -941,6 +1094,7 @@ class ICA(ContainsMixin):
         This method helps visualizing signal quality and arficat rejection.
 
         Parameters
+        ----------
         inst : instance of mne.io.Raw or mne.io.Evoked
             The signals to be compared given the ICA solution. If Raw input,
             The raw data are displayed before and after cleaning. In a second
@@ -954,6 +1108,11 @@ class ICA(ContainsMixin):
             X-axis stop index. If None to the end.
         title : str
             The figure title.
+
+        Returns
+        -------
+        fig : instance of pyplot.Figure
+            The figure.
         """
         return plot_ica_overlay(self, inst, start=start, stop=stop,
                                 title=title)
@@ -1322,150 +1481,6 @@ class ICA(ContainsMixin):
                           add_nodes=add_nodes)
 
         return self
-
-    def _pre_whiten(self, data, info, picks):
-        """Aux function"""
-        info = pick_info(deepcopy(info), picks)
-        has_pre_whitener = hasattr(self, '_pre_whitener')
-        if not has_pre_whitener and self.noise_cov is None:
-            # use standardization as whitener
-            # Scale (z-score) the data by channel type
-            pre_whitener = np.empty([len(data), 1])
-            for ch_type in ['mag', 'grad', 'eeg']:
-                if _contains_ch_type(info, ch_type):
-                    if ch_type == 'eeg':
-                        this_picks = pick_types(info, meg=False, eeg=True)
-                    else:
-                        this_picks = pick_types(info, meg=ch_type, eeg=False)
-                    pre_whitener[this_picks] = np.std(data[this_picks])
-            data /= pre_whitener
-        elif not has_pre_whitener and self.noise_cov is not None:
-            ncov = deepcopy(self.noise_cov)
-            if data.shape[0] != ncov['data'].shape[0]:
-                ncov['data'] = ncov['data'][picks][:, picks]
-                assert data.shape[0] == ncov['data'].shape[0]
-
-            pre_whitener, _ = compute_whitener(ncov, info, picks)
-            data = fast_dot(pre_whitener, data)
-        elif has_pre_whitener and self.noise_cov is None:
-            data /= self._pre_whitener
-            pre_whitener = self._pre_whitener
-        else:
-            data = fast_dot(self._pre_whitener, data)
-            pre_whitener = self._pre_whitener
-
-        return data, pre_whitener
-
-    def _fit(self, data, max_pca_components, fit_type):
-        """Aux function """
-        from sklearn.decomposition import RandomizedPCA
-
-        # XXX fix copy==True later. Bug in sklearn, see PR #2273
-        pca = RandomizedPCA(n_components=max_pca_components, whiten=True,
-                            copy=True)
-
-        if isinstance(self.n_components, float):
-            # compute full feature variance before doing PCA
-            full_var = np.var(data, axis=1).sum()
-
-        data = pca.fit_transform(data.T)
-
-        if isinstance(self.n_components, float):
-            logger.info('Selecting PCA components by explained variance.')
-            # compute eplained variance manually, cf. sklearn bug
-            # fixed in #2664
-            explained_variance_ratio_ = pca.explained_variance_ / full_var
-            n_components_ = np.sum(explained_variance_ratio_.cumsum()
-                                   <= self.n_components)
-            if n_components_ < 1:
-                raise RuntimeError('One PCA component captures most of the '
-                                   'explained variance, your threshold resu'
-                                   'lts in 0 components. You should select '
-                                   'a higher value.')
-            sel = slice(n_components_)
-        else:
-            logger.info('Selecting PCA components by number.')
-            if self.n_components is not None:  # normal n case
-                sel = slice(self.n_components)
-            else:  # None case
-                logger.info('Using all PCA components.')
-                sel = slice(len(pca.components_))
-
-        # the things to store for PCA
-        self.pca_mean_ = pca.mean_
-        self.pca_components_ = pca.components_
-        # unwhiten pca components and put scaling in unmixintg matrix later.
-        self.pca_explained_variance_ = exp_var = pca.explained_variance_
-        self.pca_components_ *= np.sqrt(exp_var[:, None])
-        del pca
-        # update number of components
-        self.n_components_ = sel.stop
-        if self.n_pca_components is not None:
-            if self.n_pca_components > len(self.pca_components_):
-                self.n_pca_components = len(self.pca_components_)
-
-        # Take care of ICA
-        from sklearn.decomposition import FastICA  # to avoid strong dep.
-        ica = FastICA(algorithm=self.algorithm, fun=self.fun,
-                      fun_args=self.fun_args, whiten=False,
-                      random_state=self.random_state)
-        ica.fit(data[:, sel])
-
-        # get unmixing and add scaling
-        self.unmixing_matrix_ = getattr(ica, 'components_', 'unmixing_matrix_')
-        self.unmixing_matrix_ /= np.sqrt(exp_var[sel])[None, :]
-        self.mixing_matrix_ = linalg.pinv(self.unmixing_matrix_)
-        self.current_fit = fit_type
-
-    def _picks_sources(self, data, include, exclude):
-        """Aux functio n"""
-        if exclude is None:
-            exclude = self.exclude
-        else:
-            exclude = self.exclude = list(set(self.exclude + list(exclude)))
-
-        _n_pca_comp = _check_n_pca_components(self, self.n_pca_components,
-                                              self.verbose)
-
-        if not(self.n_components_ <= _n_pca_comp <= self.max_pca_components):
-            raise ValueError('n_pca_components must be between '
-                             'n_components and max_pca_components.')
-
-        n_components = self.n_components_
-
-        # Apply first PCA
-        if self.pca_mean_ is not None:
-            data -= self.pca_mean_[:, None]
-
-        pca_data = fast_dot(self.pca_components_, data)
-        # Apply unmixing to low dimension PCA
-        sources = fast_dot(self.unmixing_matrix_, pca_data[:n_components])
-
-        if include not in (None, []):
-            mask = np.ones(len(sources), dtype=np.bool)
-            mask[np.unique(include)] = False
-            sources[mask] = 0.
-        elif exclude not in (None, []):
-            sources[np.unique(exclude)] = 0.
-
-        pca_data[:n_components] = fast_dot(self.mixing_matrix_, sources)
-        data = fast_dot(self.pca_components_[:n_components].T,
-                        pca_data[:n_components])
-        if self.n_pca_components is not None and _n_pca_comp > n_components:
-            data += fast_dot(self.pca_components_[n_components:_n_pca_comp].T,
-                             pca_data[n_components:_n_pca_comp])
-
-        if self.pca_mean_ is not None:
-            data += self.pca_mean_[:, None]
-
-        # restore scaling
-        if self.noise_cov is None:  # revert standardization
-            data *= self._pre_whitener
-        else:
-            data = fast_dot(linalg.pinv(self._pre_whitener), data)
-
-        return data
-
 
 @verbose
 def _check_n_pca_components(ica, _n_pca_comp, verbose=None):
