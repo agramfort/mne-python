@@ -206,13 +206,13 @@ def _get_ecg_channel_index(ch_name, inst):
 def create_ecg_epochs(raw, ch_name=None, event_id=999, picks=None,
                       tmin=-0.5, tmax=0.5):
 
-    events, _, _ = find_ecg_events(raw, ch_name=None, event_id=event_id,
+    events, _, _ = find_ecg_events(raw, ch_name=ch_name, event_id=event_id,
                                    l_freq=8, h_freq=16)
 
     # create epochs around ECG events
     ecg_epochs = Epochs(raw, events=events, event_id=event_id,
-                        tmin=tmin, tmax=tmax, baseline=None, proj=False,
-                        picks=picks)
+                        tmin=tmin, tmax=tmax, proj=False,
+                        picks=picks, baseline=(None, 0))  # baseline!
     return ecg_epochs
 
 

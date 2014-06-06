@@ -183,7 +183,7 @@ class ICA(ContainsMixin):
     """
     @verbose
     def __init__(self, n_components, max_pca_components=100,
-                 n_pca_components=64, noise_cov=None, random_state=None,
+                 n_pca_components=None, noise_cov=None, random_state=None,
                  algorithm='parallel', fun='logcosh', fun_args=None,
                  verbose=None):
 
@@ -269,6 +269,11 @@ class ICA(ContainsMixin):
                 if isinstance(target, string_types):
                     pick = _get_target_ch(inst, target)
                     target, _ = inst[pick, start:stop]
+
+            if sources.shape[-1] != target.shape[-1]:
+                raise ValueError('Source and targets do not have the same'
+                                 'number of time slices.')
+
         elif isinstance(inst, _BaseEpochs):
             sources = self._transform_epochs(inst, concatenate=True)
             if target is not None:
@@ -279,9 +284,9 @@ class ICA(ContainsMixin):
                     if target.ndim == 3 and min(target.shape) == 1:
                         target = target.ravel()
 
-        if sources.shape[-1] != target.shape[-1]:
-            raise ValueError('Source and targets do not have the same'
-                             'number of time slices.')
+            if sources.shape[-1] != target.shape[-1]:
+                raise ValueError('Source and targets do not have the same'
+                                 'number of time slices.')
         # auto target selection
         sources, target = _band_pass_filter(self, sources, target, l_freq,
                                             h_freq)
@@ -314,26 +319,27 @@ class ICA(ContainsMixin):
                                      start=start, stop=stop,
                                      l_freq=l_freq, h_freq=h_freq)
         ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
-        return ecg_idx, scores.astype(ch_name, np.float64)
+        return ecg_idx, [scores]
 
     @verbose
     def find_bads_eog(self, inst, ch_name=None, threshold=3,
-                      start=None, stop=None, l_freq=8, h_freq=16):
+                      start=None, stop=None, l_freq=8, h_freq=16, verbose=None):
 
         eog_inds = _get_eog_channel_index(ch_name, inst)
-        eog_chs = [inst.ch_names[k] for k in eog_inds]
+        if len(eog_inds) > 2:
+            eog_inds = eog_inds[:1]
+            logger.info('Using EOG channel %s' % inst.ch_names[eog_inds[0]])
         scores, eog_idx = [], []
-        for eog_ch in eog_chs:
+        eog_chs = [inst.ch_names[k] for k in eog_inds]
+        for eog_ch in eog_chs:  # implement later
             scores += [self.scores_sources(inst, target=eog_ch,
                                            score_func='pearsonr',
                                            start=start, stop=stop,
                                            l_freq=l_freq, h_freq=h_freq)]
             eog_idx += [find_outlier_adaptive(scores[-1], threshold=threshold)]
-        dtype = [(k, np.float) for k in eog_chs]
-        if len(scores) == 1:
-            scores = scores[0]
-        scores = np.array(scores, dtype=dtype)
-        return np.unique(np.c_[eog_idx]), scores
+        eog_idx = np.unique(np.c_[eog_idx])
+
+        return eog_idx, scores
 
     @verbose
     def apply(self, inst, include=None, exclude=None,
@@ -1215,13 +1221,13 @@ class ICA(ContainsMixin):
 
     def plot_components(self, source_idx, ch_type='mag', res=500, layout=None,
                         vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
-                        show=True):
+                        title=None, show=True):
         return plot_ica_components(self, source_idx=source_idx,
                                    ch_type=ch_type,
                                    res=res, layout=layout, vmax=vmax,
                                    cmap=cmap,
                                    sensors=sensors, colorbar=colorbar,
-                                   show=show)
+                                   title=title, show=show)
 
     def plot_scores(self, scores, exclude=None, axhline=None,
                     title='ICA component scores', figsize=(12, 6)):
@@ -1357,7 +1363,8 @@ class ICA(ContainsMixin):
     def _pre_whiten(self, data, info, picks):
         """Aux function"""
         info = pick_info(deepcopy(info), picks)
-        if self.noise_cov is None:  # use standardization as whitener
+        has_pre_whitener = hasattr(self, '_pre_whitener')
+        if not has_pre_whitener and self.noise_cov is None:  # use standardization as whitener
             # Scale (z-score) the data by channel type
             pre_whitener = np.empty([len(data), 1])
             for ch_type in ['mag', 'grad', 'eeg']:
@@ -1368,7 +1375,7 @@ class ICA(ContainsMixin):
                         this_picks = pick_types(info, meg=ch_type, eeg=False)
                     pre_whitener[this_picks] = np.std(data[this_picks])
             data /= pre_whitener
-        elif not hasattr(self, '_pre_whitener'):  # pick cov
+        elif not has_pre_whitener and self.noise_cov is not None:
             ncov = deepcopy(self.noise_cov)
             if data.shape[0] != ncov['data'].shape[0]:
                 ncov['data'] = ncov['data'][picks][:, picks]
@@ -1376,6 +1383,9 @@ class ICA(ContainsMixin):
 
             pre_whitener, _ = compute_whitener(ncov, info, picks)
             data = fast_dot(pre_whitener, data)
+        elif has_pre_whitener and self.noise_cov is None:
+            data /= self._pre_whitener
+            pre_whitener = self._pre_whitener
         else:
             data = fast_dot(self._pre_whitener, data)
             pre_whitener = self._pre_whitener

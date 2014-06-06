@@ -74,7 +74,7 @@ ica.plot_sources(ecg_evoked, exclude=bad_inds)
 ica.plot_overlay(ecg_evoked)
 
 
-# picks = mne.pick_types(raw.info, meg=True, eeg=True, exclude='bads')
+picks = mne.pick_types(raw.info, meg=True, eeg=True, exclude='bads')
 # start_compare, stop_compare = raw.time_as_index([0., 3.])
 # data, times = raw[picks, start_compare:stop_compare]
 # raw_cln = ica.apply(raw, start=start_compare, stop=stop_compare)

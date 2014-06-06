@@ -29,46 +29,37 @@ data_path = sample.data_path()
 raw_fname = data_path + '/MEG/sample/sample_audvis_filt-0-40_raw.fif'
 
 raw = Raw(raw_fname, preload=True)
-
 picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=True,
                        ecg=True, stim=False, exclude='bads')
 
 tmin, tmax, event_id = -0.2, 0.5, 1
-baseline = (None, 0)
-reject = None
-
 events = mne.find_events(raw, stim_channel='STI 014')
 epochs = mne.Epochs(raw, events, event_id, tmin, tmax, proj=False, picks=picks,
-                    baseline=baseline, preload=True, reject=reject)
-
+                    baseline=(None, 0), preload=True, reject=None)
 
 ###############################################################################
 # Fit ICA model
-# for more background information visit the plot_ica_from_raw.py example
 
-ica = ICA(n_components=0.90, n_pca_components=64, max_pca_components=100,
-          noise_cov=None, random_state=42)
-
-ica.fit(epochs, decim=2)
+ica = ICA(n_components=0.99, max_pca_components=None).fit(epochs)
 print(ica)
 
 ###############################################################################
 # Find EOG Artifacts
 
-eog_inds, eog_scores = ica.find_bads_eog(epochs)
+eog_inds, eog_scores = ica.find_bads_eog(epochs, threshold=4)
 
 ica.plot_scores(eog_scores)
 title = 'Sources related to %s artifacts'
-ica.plot_sources(epochs, eog_inds, title=title % 'ECG')
-ica.plot_topomap(epochs, eog_inds, title=title % 'ECG')
+ica.plot_sources(epochs, eog_inds, title=title % 'EOG')
+ica.plot_components(eog_inds, title=title % 'EOG')
+
+ica.exclude.extend(eog_inds)  # mark bad components
 
 ###############################################################################
 # Assess component selection and unmixing quality
 
-ica.exclude += [eog_inds]  # mark bad components
-
 # check EOG
-eog_evoked = create_eog_epochs(raw).average()  # get eog artifacts
+eog_evoked = create_eog_epochs(raw, picks=picks).average()  # get eog artifacts
 ica.plot_sources(eog_evoked)  # plot eog sources
 
 # check ERF

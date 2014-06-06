@@ -1891,7 +1891,7 @@ def plot_ica_topomap(ica, source_idx, ch_type='mag', res=500, layout=None,
 
 def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
                         vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
-                        show=True):
+                        title=None, show=True):
     """ Plot topographic map from ICA component.
 
     Parameters
@@ -1940,6 +1940,9 @@ def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
 
     # prepare data for iteration
     fig, axes = _prepare_trellis(len(data), max_col=5)
+    if title is None:
+        title = 'ICA components'
+    fig.suptitle(title)
 
     if vmax is None:
         vrange = np.array([f(data) for f in (np.min, np.max)])
@@ -1968,7 +1971,7 @@ def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
 
     if show is True:
         plt.show()
-
+    fig.subplots_adjust(top=0.9)
     return fig
 
 
@@ -2022,11 +2025,11 @@ def plot_ica_sources(ica, inst, order=None, exclude=None, start=None,
 
     if isinstance(inst, _BaseRaw) or isinstance(inst, _BaseEpochs):
         if isinstance(inst, _BaseRaw):
-            sources = ica._get_sources_raw(inst, start, stop)
+            sources = ica._transform_raw(inst, start, stop)
         else:
             if start is not None or stop is not None:
                 inst = inst.crop(start, stop, copy=True)
-            sources = ica._get_sources_epochs(inst, concatenate=True)
+            sources = ica._transform_epochs(inst, concatenate=True)
         if order is not None:
             if np.isscalar(order):
                 order = [order]
@@ -2152,7 +2155,7 @@ def _plot_ica_sources_evoked(evoked, exclude, title):
     for ii in exclude:
         # use indexing to expose event related sources
         color, label = ('r', 'ICA %02d' % ii)
-        plt.plot(times, evoked.data[ii], color='r', label=label)
+        plt.plot(times, evoked.data[ii].T, color='r', label=label)
 
     plt.title(title)
     plt.xlim(times[[0, -1]])
@@ -2164,7 +2167,8 @@ def _plot_ica_sources_evoked(evoked, exclude, title):
 
 
 def plot_ica_scores(ica, scores, exclude=None, axhline=None,
-                    title='ICA component scores', figsize=(12, 6)):
+                    title='ICA component scores',
+                    figsize=(12, 6)):
     """Plot scores and detected components
 
     Parameters
@@ -2184,25 +2188,31 @@ def plot_ica_scores(ica, scores, exclude=None, axhline=None,
         The figure size. Defaults to (12, 6)
     """
     import matplotlib.pyplot as plt
-    fig = plt.figure(figsize=(12, 6) if figsize is None else figsize)
-    plt.title(title)
+    n_rows = len(scores)
+    figsize = (12, 6) if figsize is None else figsize
+    fig, axes = plt.subplots(n_rows, figsize=figsize)
+    plt.suptitle(title)
     my_range = np.arange(ica.n_components_)
-    if len(my_range) != len(scores):
-        raise ValueError('The length ofr `scores` must equal the '
-                         'number of ICA components.')
     if exclude is None:
         exclude = np.array(ica.exclude)
-    plt.bar(my_range, scores, color='w')
-    for excl in exclude:
-        plt.bar(my_range[excl], scores[excl], color='r')
-    if axhline is not None:
-        if np.isscalar(axhline):
-            axhline = [axhline]
-        ax = plt.gca()
-        for axl in axhline:
-            ax.axhline(axl, color='r', linestyle='--')
-    plt.ylabel('score')
-    plt.xlabel('ICA components')
+    if isinstance(axes, np.ndarray):
+        axes = axes.flatten()
+    else:
+        axes = [axes]
+    for this_scores, ax in zip(scores, axes):
+        if len(my_range) != len(this_scores):
+            raise ValueError('The length ofr `scores` must equal the '
+                             'number of ICA components.')
+        plt.bar(my_range, this_scores, color='w')
+        for excl in exclude:
+            ax.bar(my_range[excl], this_scores[excl], color='r')
+        if axhline is not None:
+            if np.isscalar(axhline):
+                axhline = [axhline]
+            for axl in axhline:
+                ax.axhline(axl, color='r', linestyle='--')
+        ax.set_ylabel('score')
+        ax.set_xlabel('ICA components')
     plt.show()
     tight_layout(fig=fig)
     return fig
@@ -2318,7 +2328,7 @@ def _plot_ica_overlay_evoked(evoked, evoked_cln, title):
                          'Found different channels.')
 
     fig, axes = plt.subplots(n_rows, 1)
-    fig.suptitle('Average artifact before (red) and after (black) ICA)')
+    fig.suptitle('Average signal before (red) and after (black) ICA)')
     axes = axes.flatten()
 
     evoked.plot(axes=axes)
