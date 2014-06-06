@@ -683,6 +683,43 @@ class ICA(ContainsMixin):
 
     def score_sources(self, inst, target, score_func='pearson', start=None,
                       stop=None, l_freq=None, h_freq=None):
+        """Assign score to components based on statistic or metric
+
+        Parameters
+        ----------
+        inst : instance of mne.io.Raw, mne.Epochs or mne.Evoked
+            The object to reconstruct the sources from.
+        target : array-like | ch_name | None
+            Signal to which the sources shall be compared. It has to be of
+            the same shape as the sources. If some string is supplied, a
+            routine will try to find a matching channel. If None, a score
+            function expecting only one input-array argument must be used,
+            for instance, scipy.stats.skew (default).
+        score_func : callable | str label
+            Callable taking as arguments either two input arrays
+            (e.g. Pearson correlation) or one input
+            array (e. g. skewness) and returns a float. For convenience the
+            most common score_funcs are available via string labels: Currently,
+            all distance metrics from scipy.spatial and all functions from
+            scipy.stats taking compatible input arguments are supported. These
+            function have been modified to support iteration over the rows of a
+            2D array.
+        start : int | float | None
+            First sample to include. If float, data will be interpreted as
+            time in seconds. If None, data will be used from the first sample.
+        stop : int | float | None
+            Last sample to not include. If float, data will be interpreted as
+            time in seconds. If None, data will be used to the last sample.
+        l_freq : float
+            Low pass frequency.
+        h_freq : float
+            High pass frequency.
+
+        Returns
+        -------
+        scores : ndarray
+            scores for each source as returned from score_func
+        """
         if isinstance(inst, _BaseRaw):
             sources = self._transform_raw(inst, start, stop)
             if target is not None:
@@ -733,6 +770,46 @@ class ICA(ContainsMixin):
     @verbose
     def find_bads_ecg(self, inst, ch_name=None, threshold=3,
                       start=None, stop=None, l_freq=8, h_freq=16):
+        """Detect ECG related components using correlation
+
+        Detection is based on Pearson correlation between the
+        filtered data and the filtered ECG channel. If no
+        ECG channel is available, routine attempts to create
+        an artificial ECG based on cross-channel averaging.
+        Thresholding is based on adaptive z-scoring. The above threshold
+        components will be masked and the z-score will be recomputed
+        until no supra-threshold component remains.
+
+        Parameters
+        ----------
+        inst : instance of mne.io.Raw, mne.Epochs or mne.Evoked
+            Object to compute sources from.
+        ch_name : str
+            The name of the channel to use for ECG peak detection.
+            The argument is mandatory if the dataset contains no ECG
+            channels.
+        threshold : int | float
+            The value above which a feature is classified as outlier.
+        start : int | float | None
+            First sample to include. If float, data will be interpreted as
+            time in seconds. If None, data will be used from the first sample.
+        stop : int | float | None
+            Last sample to not include. If float, data will be interpreted as
+            time in seconds. If None, data will be used to the last sample.
+        l_freq : float
+            Low pass frequency.
+        h_freq : float
+            High pass frequency.
+        verbose : bool, str, int, or None
+            If not None, override default verbose level (see mne.verbose).
+            Defaults to self.verbose.
+        Returns
+        -------
+        ecg_idx : np.ndarray of int, shape (< ica.n_components_)
+            The EOG related components
+        scores : np.ndarray of float, shape  (ica.n_components_)
+            The correlation scores.
+        """
         try:
             idx_ecg = _get_ecg_channel_index(ch_name, inst)
         except RuntimeError:
@@ -746,12 +823,50 @@ class ICA(ContainsMixin):
                                     start=start, stop=stop,
                                     l_freq=l_freq, h_freq=h_freq)
         ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
-        return ecg_idx, [scores]
+        return ecg_idx, scores
 
     @verbose
     def find_bads_eog(self, inst, ch_name=None, threshold=3,
-                      start=None, stop=None, l_freq=8, h_freq=16, verbose=None):
+                      start=None, stop=None, l_freq=8, h_freq=16,
+                      verbose=None):
+        """Detect EOG related components using correlation
 
+        Detection is based on Pearson correlation between the
+        filtered data and the filtered ECG channel.
+        Thresholding is based on adaptive z-scoring. The above threshold
+        components will be masked and the z-score will be recomputed
+        until no supra-threshold component remains.
+
+        Parameters
+        ----------
+        inst : instance of mne.io.Raw, mne.Epochs or mne.Evoked
+            Object to compute sources from.
+        ch_name : str
+            The name of the channel to use for ECG peak detection.
+            The argument is mandatory if the dataset contains no ECG
+            channels.
+        threshold : int | float
+            The value above which a feature is classified as outlier.
+        start : int | float | None
+            First sample to include. If float, data will be interpreted as
+            time in seconds. If None, data will be used from the first sample.
+        stop : int | float | None
+            Last sample to not include. If float, data will be interpreted as
+            time in seconds. If None, data will be used to the last sample.
+        l_freq : float
+            Low pass frequency.
+        h_freq : float
+            High pass frequency.
+        verbose : bool, str, int, or None
+            If not None, override default verbose level (see mne.verbose).
+            Defaults to self.verbose.
+        Returns
+        -------
+        ecg_idx : np.ndarray of int, shape (< ica.n_components_)
+            The EOG related components
+        scores : np.ndarray of float, shape (ica.n_components_) | list of array
+            The correlation scores.
+        """
         eog_inds = _get_eog_channel_index(ch_name, inst)
         if len(eog_inds) > 2:
             eog_inds = eog_inds[:1]
@@ -765,6 +880,8 @@ class ICA(ContainsMixin):
                                           l_freq=l_freq, h_freq=h_freq)]
             eog_idx += [find_outlier_adaptive(scores[-1], threshold=threshold)]
         eog_idx = np.unique(np.c_[eog_idx])
+        if len(scores) == 1:
+            scores = scores[0]
 
         return eog_idx, scores
 

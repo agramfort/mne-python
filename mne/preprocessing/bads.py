@@ -16,8 +16,8 @@ def find_outlier_adaptive(X, threshold=3, max_iter=10):
     ----------
     X : np.ndarray of float
         The metric under question.
-    fun : callable
-        The function to be applied in each iteration.
+    threshold : int | float
+        The value above which a feature is classified as outlier.
 
     Returns
     -------

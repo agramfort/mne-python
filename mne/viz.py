@@ -1113,8 +1113,9 @@ def plot_projs_topomap(projs, layout=None, cmap='RdBu_r', sensors='k,',
     return fig
 
 
-def plot_topomap(data, pos, vmax=None, vmin=None, cmap='RdBu_r', sensors='k,', 
-                 res=100, axis=None, names=None, show_names=False):
+def plot_topomap(data, pos, vmax=None, vmin=None, cmap='RdBu_r',
+                 sensors='k,', res=100, axis=None, names=None,
+                 show_names=False):
     """Plot a topographic map as image
 
     Parameters
@@ -2095,6 +2096,8 @@ def plot_ica_sources(ica, inst, order=None, exclude=None, start=None,
         fig = _plot_ica_sources_evoked(evoked=sources,
                                        exclude=exclude,
                                        title=title)
+    else:
+        raise ValueError('Data input must be of Raw or Epochs type')
 
     return fig
 
@@ -2240,17 +2243,19 @@ def plot_ica_scores(ica, scores, exclude=None, axhline=None,
         The figure object
     """
     import matplotlib.pyplot as plt
-    n_rows = len(scores)
-    figsize = (12, 6) if figsize is None else figsize
-    fig, axes = plt.subplots(n_rows, figsize=figsize)
-    plt.suptitle(title)
     my_range = np.arange(ica.n_components_)
     if exclude is None:
         exclude = np.array(ica.exclude)
+    if not isinstance(scores[0], (list, np.ndarray)):
+        scores = [scores]
+    n_rows = len(scores)
+    figsize = (12, 6) if figsize is None else figsize
+    fig, axes = plt.subplots(n_rows, figsize=figsize)
     if isinstance(axes, np.ndarray):
         axes = axes.flatten()
     else:
         axes = [axes]
+    plt.suptitle(title)
     for this_scores, ax in zip(scores, axes):
         if len(my_range) != len(this_scores):
             raise ValueError('The length ofr `scores` must equal the '
@@ -2302,6 +2307,8 @@ def plot_ica_overlay(ica, inst, exclude=None, picks=None, start=None,
     from .io.evoked import Evoked
     from .preprocessing.ica import _check_start_stop
     import matplotlib.pyplot as plt
+    if not isinstance(inst, (_BaseRaw, Evoked)):
+        raise ValueError('Data input must be of Raw or Epochs type')
     if title is None:
         title = 'Signals before (red) and after (black) cleaning'
     if picks is None:
@@ -2328,9 +2335,6 @@ def plot_ica_overlay(ica, inst, exclude=None, picks=None, start=None,
         evoked_cln = ica.apply(inst)
         fig = _plot_ica_overlay_evoked(evoked=inst, evoked_cln=evoked_cln,
                                        title=title)
-    else:
-        raise ValueError('Expected Raw or Evoked objects as input, '
-                         'got %s instead' % inst)
     if show is True:
         plt.show()
     return fig
