@@ -805,8 +805,8 @@ class ICA(ContainsMixin):
 
         Returns
         -------
-        ecg_idx : np.ndarray of int, shape (< ica.n_components_)
-            The EOG related components
+        ecg_idx : list of int
+            The indices of EOG related components.
         scores : np.ndarray of float, shape (ica.n_components_)
             The correlation scores.
         """
@@ -828,7 +828,7 @@ class ICA(ContainsMixin):
                                     l_freq=l_freq, h_freq=h_freq,
                                     verbose=verbose)
         ecg_idx = find_outlier_adaptive(scores, threshold=threshold)
-        return ecg_idx, scores
+        return list(ecg_idx), scores
 
     @verbose
     def find_bads_eog(self, inst, ch_name=None, threshold=3,
@@ -868,8 +868,8 @@ class ICA(ContainsMixin):
 
         Returns
         -------
-        ecg_idx : np.ndarray of int, shape (< ica.n_components_)
-            The EOG related components
+        ecg_idx : list of int
+            The indices of EOG related components.
         scores : np.ndarray of float, shape (ica.n_components_) | list of array
             The correlation scores.
         """
@@ -893,7 +893,7 @@ class ICA(ContainsMixin):
         if len(scores) == 1:
             scores = scores[0]
 
-        return eog_idx, scores
+        return list(eog_idx), scores
 
     def apply(self, inst, include=None, exclude=None,
               n_pca_components=None, start=None, stop=None,

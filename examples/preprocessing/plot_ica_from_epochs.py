@@ -53,7 +53,7 @@ order = np.abs(scores).argsort()[::-1][:5]
 ica.plot_sources(epochs, order, exclude=ecg_inds, title=title % 'ECG')
 ica.plot_components(ecg_inds, title=title % 'ECG')
 
-ica.exclude.extend(ecg_inds)  # mark bad components
+ica.exclude += ecg_inds  # mark bad components
 
 ###############################################################################
 # 3) Assess component selection and unmixing quality
