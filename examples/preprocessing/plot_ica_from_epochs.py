@@ -26,7 +26,7 @@ from mne.datasets import sample
 data_path = sample.data_path()
 raw_fname = data_path + '/MEG/sample/sample_audvis_filt-0-40_raw.fif'
 
-raw = Raw(raw_fname, preload=True)
+raw = Raw(raw_fname)
 picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=False,
                        ecg=True, stim=False, exclude='bads')
 
