@@ -1930,20 +1930,24 @@ def plot_ica_components(ica, source_idx=None, ch_type='mag', res=500, layout=Non
 
     Returns
     -------
-    fig : instance of matplotlib.pyplot.Figure
-        The figure object.
+    fig : instance of matplotlib.pyplot.Figure or list
+        The figure object(s).
     """
     import matplotlib.pyplot as plt
 
     if source_idx is None:  # plot components by sets of 20
         n_components = ica.mixing_matrix_.shape[1]
         p = 20
+        figs = []
         for k in range(0, n_components, p):
             source_idx = range(k, min(k + p, n_components))
-            plot_ica_components(ica, source_idx=source_idx, ch_type=ch_type,
-                                res=res, layout=layout, vmax=vmax,
-                                cmap=cmap, sensors=sensors, colorbar=colorbar,
-                                title=title, show=show)
+            fig = plot_ica_components(ica, source_idx=source_idx,
+                                      ch_type=ch_type, res=res, layout=layout,
+                                      vmax=vmax, cmap=cmap, sensors=sensors,
+                                      colorbar=colorbar, title=title,
+                                      show=show)
+            figs.append(fig)
+        return figs
     elif np.isscalar(source_idx):
         source_idx = [source_idx]
 
