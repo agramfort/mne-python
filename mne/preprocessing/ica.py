@@ -183,7 +183,7 @@ class ICA(ContainsMixin):
         the number of samples used on fit.
     """
     @verbose
-    def __init__(self, n_components, max_pca_components=100,
+    def __init__(self, n_components=None, max_pca_components=100,
                  n_pca_components=None, noise_cov=None, random_state=None,
                  algorithm='parallel', fun='logcosh', fun_args=None,
                  verbose=None):
