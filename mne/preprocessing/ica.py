@@ -1101,15 +1101,16 @@ class ICA(ContainsMixin):
 
         return self
 
-    def plot_components(self, source_idx, ch_type='mag', res=500, layout=None,
+    def plot_components(self, source_idx=None, ch_type='mag', res=500, layout=None,
                         vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                         title=None, show=True):
         """Project unmixing matrix on interpolated sensor topogrpahy.
 
         Parameters
         ----------
-        source_idx : int | array-like
+        source_idx : int | array-like | None
             The indices of the sources to be plotted.
+            If None all are plotted in batches of 20.
         ch_type : 'mag' | 'grad' | 'planar1' | 'planar2' | 'eeg'
             The channel type to plot. For 'grad', the gradiometers are
             collected in pairs and the RMS for each pair is plotted.

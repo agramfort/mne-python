@@ -1894,7 +1894,7 @@ def plot_ica_topomap(ica, source_idx, ch_type='mag', res=500, layout=None,
                                vmax, cmap, sensors, colorbar)
 
 
-def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
+def plot_ica_components(ica, source_idx=None, ch_type='mag', res=500, layout=None,
                         vmax=None, cmap='RdBu_r', sensors='k,', colorbar=True,
                         title=None, show=True):
     """Project unmixing matrix on interpolated sensor topogrpahy.
@@ -1903,8 +1903,9 @@ def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
     ----------
     ica : instance of mne.preprocessing.ICA
         The ICA solution.
-    source_idx : int | array-like
+    source_idx : int | array-like | None
         The indices of the sources to be plotted.
+        If None all are plotted in batches of 20.
     ch_type : 'mag' | 'grad' | 'planar1' | 'planar2' | 'eeg'
         The channel type to plot. For 'grad', the gradiometers are
         collected in pairs and the RMS for each pair is plotted.
@@ -1934,7 +1935,16 @@ def plot_ica_components(ica, source_idx, ch_type='mag', res=500, layout=None,
     """
     import matplotlib.pyplot as plt
 
-    if np.isscalar(source_idx):
+    if source_idx is None:  # plot components by sets of 20
+        n_components = ica.mixing_matrix_.shape[1]
+        p = 20
+        for k in range(0, n_components, p):
+            source_idx = range(k, min(k + p, n_components))
+            plot_ica_components(ica, source_idx=source_idx, ch_type=ch_type,
+                                res=res, layout=layout, vmax=vmax,
+                                cmap=cmap, sensors=sensors, colorbar=colorbar,
+                                title=title, show=show)
+    elif np.isscalar(source_idx):
         source_idx = [source_idx]
 
     data = np.dot(ica.mixing_matrix_[:, source_idx].T,

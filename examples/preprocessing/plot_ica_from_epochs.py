@@ -14,6 +14,7 @@ print(__doc__)
 #
 # License: BSD (3-clause)
 
+import numpy as np
 import mne
 from mne.io import Raw
 from mne.preprocessing import ICA, create_ecg_epochs
@@ -47,7 +48,7 @@ ecg_inds, scores = ica.find_bads_ecg(epochs, threshold=3)
 ica.plot_scores(scores, exclude=ecg_inds)
 
 title = 'Sources related to %s artifacts (red)'
-order = abs(scores).argsort()[::-1][:5]
+order = np.abs(scores).argsort()[::-1][:5]
 
 ica.plot_sources(epochs, order, exclude=ecg_inds, title=title % 'ECG')
 ica.plot_components(ecg_inds, title=title % 'ECG')

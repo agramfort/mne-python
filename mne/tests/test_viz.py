@@ -288,7 +288,7 @@ def test_plot_ica_components():
     ica.fit(raw, picks=ica_picks)
     warnings.simplefilter('always', UserWarning)
     with warnings.catch_warnings(record=True):
-        for components in [0, [0], [0, 1], [0, 1] * 7]:
+        for components in [0, [0], [0, 1], [0, 1] * 7, None]:
             ica.plot_components(components)
     ica.info = None
     assert_raises(RuntimeError, ica.plot_components, 1)
