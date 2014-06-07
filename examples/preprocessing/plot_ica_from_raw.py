@@ -4,7 +4,7 @@ Compute ICA components on raw data
 ==================================
 
 ICA is fit to MEG raw data.
-The sources matching the EOG are automatically found and displayed.
+The sources matching the ECG and EOG are automatically found and displayed.
 Subsequently, artefact detection and rejection quality are assessed.
 """
 print(__doc__)
@@ -14,6 +14,7 @@ print(__doc__)
 #
 # License: BSD (3-clause)
 
+import numpy as np
 import mne
 from mne.io import Raw
 from mne.preprocessing import ICA
@@ -29,9 +30,6 @@ raw_fname = data_path + '/MEG/sample/sample_audvis_filt-0-40_raw.fif'
 raw = Raw(raw_fname, preload=True)
 raw.filter(1, 45, n_jobs=2)
 
-picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=False,
-                       stim=False, exclude='bads')
-
 ###############################################################################
 # Setup ICA seed decompose data, then access and plot sources.
 
@@ -43,16 +41,19 @@ ica = ICA(n_components=0.90, max_pca_components=None)
 ###############################################################################
 # 1) Fit ICA model and identify bad sources
 
+picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=False,
+                       stim=False, exclude='bads')
+
 ica.fit(raw, picks=picks, decim=3, reject=dict(mag=4e-12, grad=4000e-13))
 
-eog_inds, scores = ica.find_bads_eog(raw, threshold=4)
+eog_inds, scores = ica.find_bads_eog(raw, threshold=4.)
 
 ica.plot_scores(scores, exclude=eog_inds)  # inspect metrics used
 
-order = abs(scores).argsort()[::-1][:5]  # indices of top five scores
+order = np.abs(scores).argsort()[::-1][:15]  # indices of top five scores
 
 # detected artifacts drawn in red (via exclude)
-ica.plot_sources(raw, order, exclude=eog_inds, start=0, stop=3.0)
+ica.plot_sources(raw, order, exclude=eog_inds, start=0., stop=3.0)
 ica.plot_components(eog_inds, colorbar=False)  # show component sensitivites
 
 ica.exclude += list(eog_inds)  # mark for exclusion
@@ -63,12 +64,12 @@ ica.exclude += list(eog_inds)  # mark for exclusion
 # show average EOG in ICA space
 eog_evoked = create_eog_epochs(raw, picks=picks).average()
 
-ica.plot_sources(eog_evoked, exclude=eog_inds)
+ica.plot_sources(eog_evoked)
 
 # overlay raw and clean EOG fields
 ica.plot_overlay(eog_evoked)
 
-# check the volume does not change
+# check the amplitudes do not change
 ica.plot_overlay(raw)  # ECG artifacts remain
 
 ###############################################################################
