@@ -49,25 +49,26 @@ event_ids = {"faces":1, "scrambled":2}
 
 tmin, tmax = -0.2, 0.6
 baseline = None  # no baseline as high-pass is applied
-reject = dict(mag=1.5e-12)
+reject = dict(mag=1.5e-12)  # to get rid of EOG blinks
 
 epochs = mne.Epochs(raw, events, event_ids, tmin, tmax,  picks=picks,
                     baseline=baseline, preload=True, reject=reject)
 
 # Fit ICA, find and remove major artifacts
 
-ica = ICA(None, 50).decompose_epochs(epochs, decim=2)
+ica = ICA(max_pca_components=50).fit(epochs, decim=2)
 
-for ch_name in ['MRT51-2908', 'MLF14-2908']:  # ECG, EOG contaminated chs
-    scores = ica.find_sources_epochs(epochs, ch_name, 'pearsonr')
-    ica.exclude += list(np.argsort(np.abs(scores))[-2:])
+# Get rid of ECG
+ecg_inds, ecg_scores = ica.find_bads_ecg(epochs, ch_name='MRT51-2908',
+                                         threshold=4.)
+ica.exclude += list(ecg_inds)
 
-ica.plot_topomap(np.unique(ica.exclude))  # plot components found
-
+ica.plot_scores(ecg_scores)
+ica.plot_components(ica.exclude)  # plot components found
 
 # select ICA sources and reconstruct MEG signals, compute clean ERFs
 
-epochs = ica.pick_sources_epochs(epochs)
+epochs = ica.apply(epochs)
 
 evoked = [epochs[k].average() for k in event_ids]
 
@@ -81,6 +82,7 @@ for e in evoked:
 plt.show()
 
 # estimate noise covarariance
+# noise_cov = mne.compute_covariance(epochs, tmax=0)
 noise_cov = mne.compute_covariance(epochs.crop(None, 0, copy=True))
 
 ###############################################################################
