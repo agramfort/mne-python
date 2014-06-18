@@ -61,9 +61,8 @@ lm = linear_regression(epochs, design_matrix, names)
 
 
 def plot_topomap(x, unit, title):
-    x.plot_topomap(ch_type='mag', scale=1, size=2,
-                   times=np.linspace(0.1, 0.2, 7), vmax=np.max, unit=unit,
-                   title=title)
+    x.plot_topomap(ch_type='mag', scale=1, size=1.5, vmax=np.max, unit=unit,
+                   times=np.linspace(0.1, 0.2, 5), title=title)
 
 trial_count = lm['trial-count']
 
