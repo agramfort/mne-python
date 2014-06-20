@@ -9,49 +9,29 @@ Parts of this code are taken from scikit-learn
 
 import numpy as np
 from scipy import stats
-from scipy import linalg
-
-from nose.tools import assert_true
 
 from numpy.testing import assert_almost_equal
+
 from mne.preprocessing.infomax_ import infomax
 
 
 def center_and_norm(x, axis=-1):
     """ Centers and norms x **in place**
 
-        Parameters
-        -----------
-        x: ndarray
-            Array with an axis of observations (statistical units) measured on
-            random variables.
-        axis: int, optional
-            Axis along which the mean and variance are calculated.
+    Parameters
+    -----------
+    x: ndarray
+        Array with an axis of observations (statistical units) measured on
+        random variables.
+    axis: int, optional
+        Axis along which the mean and variance are calculated.
     """
     x = np.rollaxis(x, axis)
     x -= x.mean(axis=0)
     x /= x.std(axis=0)
 
-
-def test_gs():
-    """
-    Test gram schmidt orthonormalization
-    """
-    from sklearn.decomposition.fastica_ import _gs_decorrelation
-
-    # generate a random orthogonal  matrix
-    rng = np.random.RandomState(0)
-    W, _, _ = np.linalg.svd(rng.randn(10, 10))
-    w = rng.randn(10)
-    _gs_decorrelation(w, W, 10)
-    assert_true((w ** 2).sum() < 1.e-10)
-    w = rng.randn(10)
-    u = _gs_decorrelation(w, W, 5)
-    tmp = np.dot(u, W.T)
-    assert_true((tmp[:5] ** 2).sum() < 1.e-10)
-
-
-def test_fastica_simple(add_noise=False):
+# XXX : add that test requires sklearn
+def test_infomax_simple(add_noise=False):
     """ Test the infomax algorithm on very simple data.
     """
     from sklearn.decomposition import RandomizedPCA
@@ -85,14 +65,16 @@ def test_fastica_simple(add_noise=False):
     for algo in algos:
         X = RandomizedPCA(n_components=2, whiten=True).fit_transform(m.T)
         k_ = infomax(X, extended=algo)
-        s_ = np.dot(X, k_)
+        s_ = np.dot(X, k_).T
 
         center_and_norm(s_)
         s1_, s2_ = s_
+
         # Check to see if the sources have been estimated
         # in the wrong order
         if abs(np.dot(s1_, s2)) > abs(np.dot(s1_, s1)):
             s2_, s1_ = s_
+
         s1_ *= np.sign(np.dot(s1_, s1))
         s2_ *= np.sign(np.dot(s2_, s2))
 
@@ -104,11 +86,11 @@ def test_fastica_simple(add_noise=False):
             assert_almost_equal(np.dot(s1_, s1) / n_samples, 1, decimal=1)
             assert_almost_equal(np.dot(s2_, s2) / n_samples, 1, decimal=1)
 
-
+# XXX : add needs sklearn
 def test_non_square_infomax(add_noise=False):
     """ Test the infomax algorithm on very simple data.
     """
-    from sklearn.decomposition import RandomizedPCA, fastica
+    from sklearn.decomposition import RandomizedPCA
 
     rng = np.random.RandomState(0)
 
@@ -139,10 +121,11 @@ def test_non_square_infomax(add_noise=False):
     s_ = s_.T
 
     # Check that the mixing model described in the docstring holds:
-    assert_almost_equal(s_, np.dotun(mixing_, m))
+    assert_almost_equal(s_, np.dot(mixing_, m))
 
     center_and_norm(s_)
     s1_, s2_ = s_
+
     # Check to see if the sources have been estimated
     # in the wrong order
     if abs(np.dot(s1_, s2)) > abs(np.dot(s1_, s1)):
