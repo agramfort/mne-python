@@ -111,6 +111,7 @@ Changelog
 
    - Add new somatosensory MEG dataset with nice time-frequency content by `Alex Gramfort`_
 
+   - Add `$ mne report` command to generate html reports of MEG data analysis pipelines by `Mainak Jas`_, `Alex Gramfort`_ and `Denis Engemann`_
 
 BUG
 ~~~
