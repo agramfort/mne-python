@@ -46,6 +46,7 @@ Classes
    realtime.MockRtClient
    realtime.StimServer
    realtime.StimClient
+   report.Report
 
 Logging and Configuration
 =========================
@@ -721,3 +722,22 @@ Realtime
 
 .. automodule:: mne.realtime
    :no-members:
+
+MNE-Report
+==========
+
+:py:mod:`mne.report`:
+
+.. automodule:: mne.report
+ :no-members:
+ :no-inherited-members:
+
+.. currentmodule:: mne.report
+
+Classes:
+
+.. autosummary::
+   :toctree: generated/
+   :template: class.rst
+
+   Report
