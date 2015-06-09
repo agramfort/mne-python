@@ -47,10 +47,12 @@ picks = mne.pick_types(raw.info, meg=True, eeg=True, stim=False, eog=True,
 # Read epochs
 epochs = mne.Epochs(raw, events, event_id, tmin, tmax, picks=picks,
                     baseline=(None, 0), reject=dict(eeg=80e-6, eog=150e-6),
-                    preload=True)
+                    preload=True, proj=False)
 
+print epochs.proj
 # Plot epochs.
 epochs.plot(trellis=False, block=True, fig_title='Epochs')
+print epochs.proj  # XXX calling plot applies the projections !!!
 
 # Look at channels that caused dropped events, showing that the subject's
 # blinks were likely to blame for most epochs being dropped

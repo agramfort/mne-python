@@ -17,6 +17,7 @@ from sys import platform
 
 import numpy as np
 
+from ..utils import deprecated
 from ..utils import create_chunks, verbose, get_config
 from ..io.pick import pick_types, channel_type
 from ..io.proj import setup_proj
@@ -310,6 +311,8 @@ def _epochs_axes_onclick(event, params):
     ax.get_figure().canvas.draw()
 
 
+@deprecated("It will be removed in version 0.11. Use trellis=False "
+            "option in epochs.plot method.")
 def plot_epochs_trellis(epochs, epoch_idx=None, picks=None, scalings=None,
                         title_str='#%003i', show=True, block=False,
                         n_epochs=20):
@@ -699,7 +702,7 @@ def plot_epochs(epochs, picks=None, scalings=None, n_epochs=20,
     callback_resize = partial(_resize_event, params=params)
     fig.canvas.mpl_connect('resize_event', callback_resize)
 
-    if len(projs) > 0 and not any([p['active'] for p in epochs.info['projs']]):
+    if len(projs) > 0 and not epochs.proj:
         opt_button = mpl.widgets.Button(ax_button, 'Proj')
         callback_option = partial(_toggle_options, params=params)
         opt_button.on_clicked(callback_option)
@@ -718,12 +721,14 @@ def plot_epochs(epochs, picks=None, scalings=None, n_epochs=20,
     params['callback_key'] = callback_key
 
     callback_proj('none')
+    _layout_figure(params)
 
     if show:
         try:
             plt.show(block=block)
         except TypeError:  # not all versions have this
             plt.show()
+
     return fig
 
 
