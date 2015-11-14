@@ -17,8 +17,8 @@ from ..dipole import Dipole
 from ._lcmv import _prepare_beamformer_input, _setup_picks
 
 
-def _apply_rap_music(data, info, times, forward, noise_cov, n_dipoles=2,
-                     picks=None, return_explained_data=False):
+def _apply_rap_music(data, info, times, forward, noise_cov, n_dipoles,
+                     picks=None, return_explained_data=False, nave=1):
     """RAP-MUSIC for evoked data
 
     Parameters
@@ -40,6 +40,8 @@ def _apply_rap_music(data, info, times, forward, noise_cov, n_dipoles=2,
         (without bad channels) will be used.
     return_explained_data : bool
         If True, the explained data is returned as an array.
+    nave : int
+        The number of averages applied to the data.
 
     Returns
     -------
@@ -57,7 +59,7 @@ def _apply_rap_music(data, info, times, forward, noise_cov, n_dipoles=2,
     gain = G.copy()
 
     # Handle whitening + data covariance
-    whitener, _ = compute_whitener(noise_cov, info, picks)
+    whitener, _ = compute_whitener(noise_cov, info, picks, nave=nave)
     if info['projs']:
         whitener = np.dot(whitener, proj)
 
@@ -65,7 +67,15 @@ def _apply_rap_music(data, info, times, forward, noise_cov, n_dipoles=2,
     G = np.dot(whitener, G)
     data = np.dot(whitener, data)
 
-    eig_values, eig_vectors = linalg.eigh(np.dot(data, data.T))
+    eig_values, eig_vectors = linalg.eigh(np.cov(data))
+
+    if n_dipoles == 'auto':
+        eig_thresh = 3.
+        # As the data are now whitened the value of
+        # eig_thresh should be 1 but due to the limited number
+        # of samples to estimate the noise cov we increase it a bit.
+        n_dipoles = np.sum(eig_values > eig_thresh)
+
     phi_sig = eig_vectors[:, -n_dipoles:]
 
     n_orient = 3 if is_free_ori else 1
@@ -191,8 +201,8 @@ def _compute_proj(A):
 
 
 @verbose
-def rap_music(evoked, forward, noise_cov, n_dipoles=5, return_residual=False,
-              picks=None, verbose=None):
+def rap_music(evoked, forward, noise_cov, n_dipoles='auto',
+              return_residual=False, picks=None, verbose=None):
     """RAP-MUSIC source localization method.
 
     Compute Recursively Applied and Projected MUltiple SIgnal Classification
@@ -206,8 +216,10 @@ def rap_music(evoked, forward, noise_cov, n_dipoles=5, return_residual=False,
         Forward operator.
     noise_cov : instance of Covariance
         The noise covariance.
-    n_dipoles : int
-        The number of dipoles to look for. The default value is 5.
+    n_dipoles : int | 'auto'
+        If int, the number of dipoles to look for. If 'auto' the number
+        of dipoles is obtained by thresholding the data covariance
+        after whitening. Threshold on eigen values is set to 3.
     return_residual : bool
         If True, the residual is returned as an Evoked instance.
     picks : array-like of int | None
@@ -255,7 +267,8 @@ def rap_music(evoked, forward, noise_cov, n_dipoles=5, return_residual=False,
 
     dipoles, explained_data = _apply_rap_music(data, info, times, forward,
                                                noise_cov, n_dipoles,
-                                               picks, return_residual)
+                                               picks, return_residual,
+                                               nave=evoked.nave)
 
     if return_residual:
         residual = evoked.copy()

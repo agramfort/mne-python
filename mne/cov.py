@@ -1166,6 +1166,11 @@ def prepare_noise_cov(noise_cov, info, ch_names, rank=None,
 
     verbose : bool, str, int, or None
         If not None, override default verbose level (see mne.verbose).
+
+    Returns
+    -------
+    noise_cov : Covariance
+        The prepared noise covariance.
     """
     C_ch_idx = [noise_cov.ch_names.index(c) for c in ch_names]
     if noise_cov['diag'] is False:
@@ -1444,7 +1449,7 @@ def _regularized_covariance(data, reg=None):
 
 
 def compute_whitener(noise_cov, info, picks=None, rank=None,
-                     scalings=None, verbose=None):
+                     scalings=None, nave=1, verbose=None):
     """Compute whitening matrix.
 
     Parameters
@@ -1464,6 +1469,8 @@ def compute_whitener(noise_cov, info, picks=None, rank=None,
     scalings : dict | None
         The rescaling method to be applied. See documentation of
         ``prepare_noise_cov`` for details.
+    nave : int
+        The number of averages that the data has lived.
     verbose : bool, str, int, or None
         If not None, override default verbose level (see mne.verbose).
 
@@ -1480,7 +1487,10 @@ def compute_whitener(noise_cov, info, picks=None, rank=None,
 
     ch_names = [info['chs'][k]['ch_name'] for k in picks]
 
-    noise_cov = cp.deepcopy(noise_cov)
+    noise_cov = noise_cov.copy()
+
+    noise_cov["data"] /= nave
+
     noise_cov = prepare_noise_cov(noise_cov, info, ch_names,
                                   rank=rank, scalings=scalings)
     n_chan = len(ch_names)
