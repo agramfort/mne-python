@@ -52,6 +52,8 @@ Changelog
 
     - Add the ability to read events when importing raw EEGLAB files, by `Jona Sassenhagen`_.
 
+    - Add epoch rejection based on annotated segments by `Jaakko Leppakangas`_
+
 BUG
 ~~~
 
