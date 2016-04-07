@@ -1757,10 +1757,6 @@ class _BaseRaw(ProjMixin, ContainsMixin, UpdateChannelsMixin,
             None, preload=True or False is inferred using the preload status
             of the raw files passed in.
         """
-        from .fiff.raw import Raw
-        from .kit.kit import RawKIT
-        from .edf.edf import RawEDF
-
         if not isinstance(raws, list):
             raws = [raws]
 
@@ -1777,9 +1773,6 @@ class _BaseRaw(ProjMixin, ContainsMixin, UpdateChannelsMixin,
             else:
                 preload = False
 
-        if not preload and not isinstance(self, (Raw, RawKIT, RawEDF)):
-            raise RuntimeError('preload must be True to concatenate '
-                               'files unless they are FIF, KIT, or EDF')
         if preload is False:
             if self.preload:
                 self._data = None
