@@ -305,6 +305,7 @@ def _plot_evoked(evoked, picks, exclude, unit, show,
                         names = np.asarray([name for name in used_nm
                                             if name in layout.names])
                         name_idx = [layout.names.index(name) for name in names]
+
                         if len(name_idx) < len(chs):
                             warn('Could not find layout for all the channels. '
                                  'Legend for spatial colors not drawn.')
@@ -1026,8 +1027,8 @@ def _connection_line(x, fig, sourceax, targetax):
 
 
 def plot_evoked_joint(evoked, times="peaks", title='', picks=None,
-                      exclude=None,
-                      show=True, ts_args=None, topomap_args=None):
+                      exclude=None, show=True, ts_args=None,
+                      topomap_args=None):
     """Plot evoked data as butterfly plot and add topomaps for selected
     time points.
 

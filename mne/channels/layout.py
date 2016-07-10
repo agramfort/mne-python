@@ -389,6 +389,7 @@ def find_layout(info, ch_type=None, exclude='bads'):
     chs = info['chs']
     coil_types = set([ch['coil_type'] for ch in chs])
     channel_types = set([ch['kind'] for ch in chs])
+    ch_names = [ch['ch_name'] for ch in chs]
 
     has_vv_mag = any(k in coil_types for k in
                      [FIFF.FIFFV_COIL_VV_MAG_T1, FIFF.FIFFV_COIL_VV_MAG_T2,
@@ -399,7 +400,7 @@ def find_layout(info, ch_type=None, exclude='bads'):
     has_vv_meg = has_vv_mag and has_vv_grad
     has_vv_only_mag = has_vv_mag and not has_vv_grad
     has_vv_only_grad = has_vv_grad and not has_vv_mag
-    is_old_vv = ' ' in chs[0]['ch_name']
+    is_old_vv = ' ' in ch_names[0]
 
     has_4D_mag = FIFF.FIFFV_COIL_MAGNES_MAG in coil_types
     ctf_other_types = (FIFF.FIFFV_COIL_CTF_REF_MAG,
@@ -451,6 +452,9 @@ def find_layout(info, ch_type=None, exclude='bads'):
         return None
 
     layout = read_layout(layout_name)
+    if layout_name == 'magnesWH3600' and ch_names[0].startswith('A'):
+        assert(len(layout.names) == len(ch_names))
+        layout.names = ch_names
     if not is_old_vv:
         layout.names = _clean_names(layout.names, remove_whitespace=True)
     if has_CTF_grad:
