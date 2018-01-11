@@ -281,6 +281,8 @@ class BaseRaw(ProjMixin, ContainsMixin, UpdateChannelsMixin,
     dtype : dtype | None
         The dtype of the raw data. If preload is an ndarray, its dtype must
         match what is passed here.
+    annotations : instance of Annotations
+        The annotations added as ``annotations`` attribute the instance.
     verbose : bool, str, int, or None
         If not None, override default verbose level (see :func:`mne.verbose`
         and :ref:`Logging documentation <tut_logging>` for more).
@@ -307,7 +309,7 @@ class BaseRaw(ProjMixin, ContainsMixin, UpdateChannelsMixin,
                  first_samps=(0,), last_samps=None,
                  filenames=(None,), raw_extras=(None,),
                  orig_format='double', dtype=np.float64,
-                 verbose=None):  # noqa: D102
+                 annotations=None, verbose=None):  # noqa: D102
         # wait until the end to preload data, but triage here
         if isinstance(preload, np.ndarray):
             # some functions (e.g., filtering) only work w/64-bit data
@@ -360,7 +362,7 @@ class BaseRaw(ProjMixin, ContainsMixin, UpdateChannelsMixin,
         self._projectors = list()
         self._projector = None
         self._dtype_ = dtype
-        self.annotations = None
+        self.annotations = annotations
         # If we have True or a string, actually do the preloading
         self._update_times()
         if load_from_disk:

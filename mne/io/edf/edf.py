@@ -106,6 +106,12 @@ class RawEDF(BaseRaw):
         large amount of memory). If preload is a string, preload is the
         file name of a memory-mapped file which is used to store the data
         on the hard drive (slower, requires less memory).
+    annot_channel : str | None
+        Name of the channel used to read the annotations. These will be
+        added in the ``annotations`` attribute of the raw object.
+        If None, ``annotations`` attribute will be None. If "auto"
+        then the annotations will be searched in channel "EDF Annotations".
+        Defaults is "auto".
     verbose : bool, str, int, or None
         If not None, override default verbose level (see :func:`mne.verbose`
         and :ref:`Logging documentation <tut_logging>` for more).
@@ -151,11 +157,14 @@ class RawEDF(BaseRaw):
     @verbose
     def __init__(self, input_fname, montage, eog=None, misc=None,
                  stim_channel='auto', annot=None, annotmap=None, exclude=(),
-                 preload=False, verbose=None):  # noqa: D102
+                 preload=False, annot_channel="auto",
+                 verbose=None):  # noqa: D102
         logger.info('Extracting EDF parameters from %s...' % input_fname)
         input_fname = os.path.abspath(input_fname)
-        info, edf_info = _get_info(input_fname, stim_channel, annot,
-                                   annotmap, eog, misc, exclude, preload)
+        info, edf_info = \
+            _get_info(input_fname, stim_channel, annot,
+                      annotmap, eog, misc, exclude, preload,
+                      annot_channel)
         logger.info('Creating raw.info structure...')
         _check_update_montage(info, montage)
 
@@ -163,11 +172,17 @@ class RawEDF(BaseRaw):
             warn("Stimulus channel will not be annotated. Both 'annot' and "
                  "'annotmap' must be specified.")
 
+        annotations = None
+        if edf_info["annot_channel"] is not None:
+            annot_ch_idx = info["ch_names"].index(annot_channel)
+            annotations = _parse_annot_channel(tal_channel_data)
+
         # Raw attributes
         last_samps = [edf_info['nsamples'] - 1]
         super(RawEDF, self).__init__(
             info, preload, filenames=[input_fname], raw_extras=[edf_info],
-            last_samps=last_samps, orig_format='int', verbose=verbose)
+            last_samps=last_samps, orig_format='int', annotations=annotations,
+            verbose=verbose)
 
     @verbose
     def _read_segment_file(self, data, idx, fi, start, stop, cals, mult):
@@ -262,6 +277,8 @@ class RawEDF(BaseRaw):
                                 ch_data = np.append(ch_data, z, -1)
                             else:
                                 ch_data = ch_data[:, :buf_len]
+                            import ipdb; ipdb.set_trace()
+                            
                         elif ci == stim_channel:
                             if (annot and annotmap or stim_data is not None or
                                     tal_channels is not None):
@@ -300,6 +317,8 @@ class RawEDF(BaseRaw):
                 data[stim_channel_idx, :] = evts[start:stop + 1]
             elif tal_channels is not None:
                 tal_channel_idx = np.intersect1d(sel, tal_channels)
+                import ipdb; ipdb.set_trace()
+                
                 evts = _parse_tal_channel(np.atleast_2d(data[tal_channel_idx]))
                 self._raw_extras[fi]['events'] = evts
 
@@ -354,7 +373,7 @@ def _parse_tal_channel(tal_channel_data):
 
     Parameters
     ----------
-    tal_channel_data : ndarray, shape = [n_chans, n_samples]
+    tal_channel_data : ndarray, shape (n_chans, n_samples)
         channel data in EDF+ TAL format
 
     Returns
@@ -390,7 +409,7 @@ def _parse_tal_channel(tal_channel_data):
 
 
 def _get_info(fname, stim_channel, annot, annotmap, eog, misc, exclude,
-              preload):
+              preload, annot_channel):
     """Extract all the information from the EDF+, BDF or GDF file."""
     if eog is None:
         eog = []
@@ -432,7 +451,7 @@ def _get_info(fname, stim_channel, annot, annotmap, eog, misc, exclude,
     if stim_channel is not None:
         stim_channel = _check_stim_channel(stim_channel, ch_names, include)
 
-    # Annotations
+    # Annotations (old version)
     tal_ch_name = 'EDF Annotations'
     tal_chs = np.where(np.array(ch_names) == tal_ch_name)[0]
     if len(tal_chs) > 0:
@@ -453,6 +472,17 @@ def _get_info(fname, stim_channel, annot, annotmap, eog, misc, exclude,
         raise RuntimeError('%s' % ('EDF+ Annotations (TAL) channel needs to be'
                                    ' parsed completely on loading.'
                                    ' You must set preload parameter to True.'))
+
+    # Annotations (new version)
+    if annot_channel == "auto":
+        if "EDF Annotations" in ch_names:
+            annot_channel = "EDF Annotations"
+        else:
+            annot_channel = None
+
+    if annot_channel is not None and annot_channel not in ch_names:
+        raise ValueError('Cannot find annot_channel (%s) in list of '
+                         'channels (%s).' % (annot_channel, ch_names))
 
     # Creates a list of dicts of eeg channels for raw.info
     logger.info('Setting channel info structure...')
@@ -503,6 +533,7 @@ def _get_info(fname, stim_channel, annot, annotmap, eog, misc, exclude,
             pick_mask[idx] = False
         chs.append(chan_info)
     edf_info['stim_channel'] = stim_channel
+    edf_info['annot_channel'] = annot_channel
 
     if any(pick_mask):
         picks = [item for item, mask in zip(range(nchan), pick_mask) if mask]
@@ -1111,6 +1142,7 @@ def _read_annot(annot, annotmap, sfreq, data_length):
 
     pat = r'(\w+):(\d+)'
     annotmap = open(annotmap).read()
+
     mappings = re.findall(pat, annotmap)
     maps = {}
     for mapping in mappings:
@@ -1154,7 +1186,7 @@ def _check_stim_channel(stim_channel, ch_names, include):
 
 def read_raw_edf(input_fname, montage=None, eog=None, misc=None,
                  stim_channel='auto', annot=None, annotmap=None, exclude=(),
-                 preload=False, verbose=None):
+                 preload=False, annot_channel="auto", verbose=None):
     """Reader function for EDF+, BDF, GDF conversion to FIF.
 
     Parameters
@@ -1195,6 +1227,12 @@ def read_raw_edf(input_fname, montage=None, eog=None, misc=None,
         large amount of memory). If preload is a string, preload is the
         file name of a memory-mapped file which is used to store the data
         on the hard drive (slower, requires less memory).
+    annot_channel : str | None
+        Name of the channel used to read the annotations. These will be
+        added in the ``annotations`` attribute of the raw object.
+        If None, ``annotations`` attribute will be None. If "auto"
+        then the annotations will be searched in channel "EDF Annotations".
+        Defaults is "auto".
     verbose : bool, str, int, or None
         If not None, override default verbose level (see :func:`mne.verbose`
         and :ref:`Logging documentation <tut_logging>` for more).
