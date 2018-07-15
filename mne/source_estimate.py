@@ -1338,6 +1338,8 @@ class _BaseSurfaceSourceEstimate(_BaseSourceEstimate):
             return morph_data(subject_from, subject_to, self, grade, smooth,
                               subjects_dir, buffer_size, n_jobs, verbose)
 
+    # XXX : we should reconsider this. SourceMorph should be smart
+    # precompute what's needed to be fast
     def morph_precomputed(self, subject_to, vertices_to, morph_mat,
                           subject_from=None):
         """Morph source estimate between subjects using a precomputed matrix.
@@ -1887,6 +1889,9 @@ class VolSourceEstimate(_BaseSourceEstimate):
         return (vert_idx if vert_as_index else self.vertices[vert_idx],
                 time_idx if time_as_index else self.times[time_idx])
 
+    # XXX : should we add a morph method to VolSourceEstimate? So:
+    # def morph(self, subject_to...):
+
 
 class VectorSourceEstimate(_BaseSurfaceSourceEstimate):
     """Container for vector surface source estimates.
@@ -2253,6 +2258,8 @@ def morph_data(subject_from, subject_to, stc_from, grade=5, smooth=None,
     if not isinstance(stc_from, _BaseSurfaceSourceEstimate):
         raise ValueError('Morphing is only possible with surface or vector '
                          'source estimates')
+    # XXX : SourceMorph with src = None should mean use surface
+    # Parameter order should be subject_from, subject_to, src
     source_morph = SourceMorph(None, subject_from=subject_from,
                                subject_to=subject_to, spacing=grade,
                                smooth=smooth, subjects_dir=subjects_dir,
@@ -2319,6 +2326,11 @@ def morph_data_precomputed(subject_from, subject_to, stc_from, vertices_to,
     source_morph.data['morph_mat'] = morph_mat
 
     stc_to = _apply_morph_data(source_morph, stc_from)
+
+    # XXX one should just have to write:
+    # source_morph = SourceMorph(subject_from=subject_from,
+    #                            subject_to=subject_to)
+    # stc_to = source_morph(stc_from)
 
     return stc_to
 
