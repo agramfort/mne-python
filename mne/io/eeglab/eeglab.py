@@ -759,6 +759,8 @@ def _dol_to_lod(dol):
             for ii in range(len(dol[list(dol.keys())[0]]))]
 
 
+# XXX : check that annotations returned here are valid about the onsets
+# and orig_time
 def read_annotations_eeglab(fname, uint16_codec=None):
     r"""Create Annotations from EEGLAB file.
 
