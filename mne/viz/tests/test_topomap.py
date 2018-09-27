@@ -27,7 +27,7 @@ from mne.utils import run_tests_if_main
 
 from mne.viz import plot_evoked_topomap, plot_projs_topomap
 from mne.viz.topomap import (_check_outlines, _onselect, plot_topomap,
-                             plot_psds_topomap)
+                             plot_arrowmap, plot_psds_topomap)
 from mne.viz.utils import _find_peaks, _fake_click
 
 
@@ -416,6 +416,15 @@ def test_ctf_plotting():
     assert get_current_comp(evoked.info) == 3
     # smoke test that compensation does not matter
     evoked.plot_topomap(time_unit='s')
+
+
+@testing.requires_testing_data
+def test_plot_arrowmap():
+    """Test arrowmap plotting."""
+    evoked = read_evokeds(evoked_fname, 'Left Auditory',
+                          baseline=(None, 0))
+    evoked.pick_types(meg='mag')
+    plot_arrowmap(evoked.data[:, 175], evoked.info)
 
 
 @testing.requires_testing_data
