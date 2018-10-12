@@ -2387,9 +2387,11 @@ def _plot_corrmap(data, subjs, indices, ch_type, ica, label, show, outlines,
 def _trigradient(x, y, z):
     """Take gradients of z on a mesh."""
     from matplotlib.tri import CubicTriInterpolator, Triangulation
-    tri = Triangulation(x, y)
-    tci = CubicTriInterpolator(tri, z)
-    dx, dy = tci.gradient(tri.x, tri.y)
+    with warnings.catch_warnings():  # catch matplotlib warnings
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        tri = Triangulation(x, y)
+        tci = CubicTriInterpolator(tri, z)
+        dx, dy = tci.gradient(tri.x, tri.y)
     return dx, dy
 
 
@@ -2403,7 +2405,8 @@ def plot_arrowmap(data, info_from, info_to=None, scale=1e-10, axes=None):
     info_from : instance of Info
         The measurement info from data to interpolate from.
     info_to : instance of Info | None
-        The measurement info to interpolate to.
+        The measurement info to interpolate to. If None, it is assumed
+        to be the same as info_from.
     scale : float, default 1e-10
         To scale the arrows
     axes : instance of Axes | None
@@ -2413,12 +2416,6 @@ def plot_arrowmap(data, info_from, info_to=None, scale=1e-10, axes=None):
     -------
     fig : matplotlib.figure.Figure
         The Figure of the plot
-    ax : matplotlib.axes._subplots.AxesSubplot
-        The axes of the subplot
-    im : matplotlib.image.AxesImage
-        The interpolated data.
-    cn : matplotlib.contour.ContourSet
-        The fieldlines.
     """
     from matplotlib import pyplot as plt
     from ..forward import _map_meg_channels
