@@ -37,6 +37,7 @@ import re
 
 import numpy as np
 from scipy import linalg, sparse
+from numba import njit
 
 from .externals.six.moves import urllib
 from .externals.six import string_types, StringIO, BytesIO, integer_types
@@ -336,6 +337,7 @@ def create_chunks(sequence, size):
     return (sequence[p:p + size] for p in range(0, len(sequence), size))
 
 
+@njit
 def sum_squared(X):
     """Compute norm of an array.
 
@@ -349,7 +351,8 @@ def sum_squared(X):
     value : float
         Sum of squares of the input array X
     """
-    X_flat = X.ravel(order='F' if np.isfortran(X) else 'C')
+    # X_flat = X.ravel(order='F' if np.isfortran(X) else 'C')
+    X_flat = X.ravel()
     return np.dot(X_flat, X_flat)
 
 

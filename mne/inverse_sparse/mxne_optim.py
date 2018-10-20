@@ -8,6 +8,7 @@ from math import sqrt
 
 import numpy as np
 from scipy import linalg
+from numba import njit, jit
 
 from .mxne_debiasing import compute_bias
 from ..utils import logger, verbose, sum_squared, warn
@@ -15,12 +16,14 @@ from ..time_frequency.stft import stft_norm1, stft_norm2, stft, istft
 from ..externals.six.moves import xrange as range
 
 
+@njit
 def groups_norm2(A, n_orient):
     """Compute squared L2 norms of groups inplace."""
     n_positions = A.shape[0] // n_orient
     return np.sum(np.power(A, 2, A).reshape(n_positions, -1), axis=1)
 
 
+@njit
 def norm_l2inf(A, n_orient, copy=True):
     """L2-inf norm."""
     if A.size == 0:
@@ -30,6 +33,7 @@ def norm_l2inf(A, n_orient, copy=True):
     return sqrt(np.max(groups_norm2(A, n_orient)))
 
 
+@njit
 def norm_l21(A, n_orient, copy=True):
     """L21 norm."""
     if A.size == 0:
@@ -173,6 +177,7 @@ def prox_l1(Y, alpha, n_orient):
     return Y, active_set
 
 
+@njit
 def dgap_l21(M, G, X, active_set, alpha, n_orient):
     """Duality gap for the mixed norm inverse problem.
 
@@ -317,14 +322,14 @@ def _mixed_norm_solver_cd(M, G, alpha, lipschitz_constant, maxit=10000,
     return X, active_set, p_obj
 
 
-@verbose
+# @verbose
+@jit(cache=True)
 def _mixed_norm_solver_bcd(M, G, alpha, lipschitz_constant, maxit=200,
                            tol=1e-8, verbose=None, init=None, n_orient=1,
                            dgap_freq=10):
     """Solve L21 inverse problem with block coordinate descent."""
     # First make G fortran for faster access to blocks of columns
     G = np.asfortranarray(G)
-
     n_sensors, n_times = M.shape
     n_sensors, n_sources = G.shape
     n_positions = n_sources // n_orient
@@ -373,12 +378,12 @@ def _mixed_norm_solver_bcd(M, G, alpha, lipschitz_constant, maxit=200,
             highest_d_obj = max(d_obj, highest_d_obj)
             gap = p_obj - highest_d_obj
             E.append(p_obj)
-            logger.debug("Iteration %d :: p_obj %f :: dgap %f :: n_active %d" %
-                         (i + 1, p_obj, gap, np.sum(active_set) / n_orient))
+            # logger.debug("Iteration %d :: p_obj %f :: dgap %f :: n_active %d" %
+            #              (i + 1, p_obj, gap, np.sum(active_set) / n_orient))
 
             if gap < tol:
-                logger.debug('Convergence reached ! (gap: %s < %s)' % (gap,
-                             tol))
+                # logger.debug('Convergence reached ! (gap: %s < %s)' % (gap,
+                #              tol))
                 break
 
     X = X[active_set]
