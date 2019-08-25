@@ -20,7 +20,8 @@ from numpy.testing import (assert_array_equal, assert_almost_equal,
 from mne import create_info, EvokedArray, read_evokeds, __file__ as _mne_file
 from mne.channels import (Montage, read_montage, read_dig_montage,
                           get_builtin_montages, DigMontage,
-                          read_dig_egi, read_dig_captrack, read_dig_fif)
+                          read_dig_egi, read_dig_captrack, read_dig_fif,
+                          read_dig_polhemus)
 from mne.channels.montage import _set_montage
 from mne.channels.montage import transform_to_head
 from mne.channels._dig_montage_utils import _transform_to_head_call
@@ -371,6 +372,55 @@ def test_read_locs():
                 [-5.67059636e-01, 6.77066318e-01, 4.69067752e-01],
                 [0., 7.14575231e-01, 6.99558616e-01]]
     assert_allclose(pos[:4], expected, atol=1e-7)
+
+
+def _fix_old_polhemus_montage(montage):
+    """Hack to fix the broken historical way."""
+    montage.dig[0]['kind'] = FIFF.FIFFV_POINT_CARDINAL
+    montage.dig[1]['kind'] = FIFF.FIFFV_POINT_CARDINAL
+    montage.dig[2]['kind'] = FIFF.FIFFV_POINT_CARDINAL
+
+    montage.dig[0]['ident'] = FIFF.FIFFV_POINT_NASION
+    montage.dig[1]['ident'] = FIFF.FIFFV_POINT_LPA
+    montage.dig[2]['ident'] = FIFF.FIFFV_POINT_RPA
+
+    montage.dig[0], montage.dig[1] = montage.dig[1], montage.dig[0]
+
+    for k in range(3, 8):
+        montage.dig[k]['ident'] = k - 2
+
+
+def test_read_dig_polhemus():
+    """Test read_dig_polhemus."""
+    # Test old way matches new way
+
+    names = ['nasion', 'lpa', 'rpa', '1', '2', '3', '4', '5']
+    names_new = \
+        ['nasion', 'lpa', 'rpa', 'HPI 1', 'HPI 2', 'HPI 3', 'HPI 4', 'HPI 5']
+    # montage = read_dig_montage(hsp, hpi, elp, names, transform=False)
+    montage = read_dig_montage(hsp=None, hpi=hpi, elp=elp,
+                               point_names=names, transform=False)
+    # montage_polhemus = read_dig_polhemus(hsp=hsp, hpi=hpi, elp=elp,
+    montage_polhemus = read_dig_polhemus(hsp=None, hpi_dev=hpi, elp=elp,
+                                         point_names=names_new)
+
+    # Check the HPI in device coordinate are present
+    dig_hpi_dev = montage_polhemus.dig[-5:]
+    for d in dig_hpi_dev:
+        assert d['kind'] == FIFF.FIFFV_POINT_HPI
+        assert d['coord_frame'] == FIFF.FIFFV_COORD_DEVICE
+
+    _fix_old_polhemus_montage(montage)
+
+    assert montage.dig == montage_polhemus.dig[:-5]
+    assert object_diff(montage.ch_names, montage_polhemus.ch_names) == ''
+
+    # montage = read_dig_montage(hsp, hpi, elp, names, transform=True)
+    montage = read_dig_montage(None, hpi, elp, names, transform=True)
+    _fix_old_polhemus_montage(montage)
+    montage_polhemus = transform_to_head(montage_polhemus)
+    assert montage.dig == montage_polhemus.dig[:-5]
+    assert object_diff(montage.ch_names, montage_polhemus.ch_names) == ''
 
 
 def test_read_dig_montage():

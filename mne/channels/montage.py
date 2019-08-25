@@ -25,7 +25,8 @@ from ..transforms import (apply_trans, get_ras_to_neuromag_trans, _sph_to_cart,
                           _topo_to_sph, _str_to_frame, _frame_to_str)
 from .._digitization import Digitization
 from .._digitization._utils import (_make_dig_points, _read_dig_points,
-                                    write_dig, _read_dig_fif)
+                                    write_dig, _read_dig_fif,
+                                    _format_dig_points)
 from ..io.pick import pick_types
 from ..io.open import fiff_open
 from ..io.constants import FIFF
@@ -47,7 +48,7 @@ DEPRECATED_PARAM = object()
 def _check_get_coord_frame(dig):
     _MSG = 'Only single coordinate frame in dig is supported'
     dig_coord_frames = set([d['coord_frame'] for d in dig])
-    assert len(dig_coord_frames) == 1, _MSG
+    # assert len(dig_coord_frames) == 1, _MSG
     return _frame_to_str[dig_coord_frames.pop()]
 
 
@@ -1098,6 +1099,95 @@ def read_dig_captrack(fname):
         transform_to_head=False,
         compute_dev_head_t=False,
     )
+
+
+def read_dig_polhemus(hsp, hpi_dev, elp=None, point_names=None):
+    r"""Read subject-specific digitization obtained with Polhemus FastSCAN system
+
+    Parameters
+    ----------
+    hsp : str | None
+        This corresponds to the filename of the headshape points.
+        These points are assumed to be in the native digitizer space in meters.
+    hpi_dev : str | None
+        This corresponds to the filename of Head Position Indicator
+        (HPI) points. These points are in device space, and are only
+        necessary if computation of a ``dev_head_t`` transform
+        is required (for MEG data).
+    elp : None | str
+        This corresponds to the filename for electrode position
+        points. It can contain also locations of the fiducial points
+        (rpa, lpa, nasion) and the HPI locations in digitizer space.
+        All these points are assumed to be in the native digitizer
+        space with unit expressed in meters.
+    point_names : None | list
+        A list of point names for elp (required if elp is defined).
+        Typically this would be like::
+
+            ('nasion', 'lpa', 'rpa', 'CHPI001', 'CHPI002', 'CHPI003')
+
+    Returns
+    -------
+    montage : instance of DigMontage
+        The digitizer montage.
+
+    See Also
+    --------
+    DigMontage
+    Montage
+    read_montage
+    """
+    unit = 'mm'
+    # headshape points (HSP)
+    if hsp is not None:
+        hsp = _read_dig_points(hsp, unit=unit)
+
+    # HPI
+    if hpi_dev is not None:
+        ext = op.splitext(hpi_dev)[-1]
+        if ext in ('.txt', '.mat'):
+            hpi_dev = _read_dig_points(hpi_dev, unit='m')
+        elif ext in ('.sqd', '.mrk'):
+            from ..io.kit import read_mrk
+            hpi_dev = read_mrk(hpi_dev)
+        else:
+            raise ValueError('HPI file with extension *%s is not '
+                             'supported. Only *.txt, *.sqd and *.mrk are '
+                             'supported.' % ext)
+
+    # Electrode positions (ELP) with fiducials and HPI eventually
+    nasion, lpa, rpa, dig_ch_pos, hpi = None, None, None, None, None
+    if isinstance(elp, str):
+        elp = _read_dig_points(elp, unit=unit)
+        assert len(elp) == len(point_names)
+        lpa_idx = point_names.index("lpa")
+        rpa_idx = point_names.index("rpa")
+        nasion_idx = point_names.index("nasion")
+        lpa = elp[lpa_idx]
+        rpa = elp[rpa_idx]
+        nasion = elp[nasion_idx]
+        idx = [lpa_idx, rpa_idx, nasion_idx]
+        lpa, rpa, nasion = elp[idx]
+        elp = np.delete(elp, idx, axis=0)
+        point_names = np.delete(point_names, idx, axis=0)
+
+        hpi_idx = [k for k, name in enumerate(point_names) if 'HPI' in name]
+        eeg_idx = np.setdiff1d(np.arange(len(point_names)), hpi_idx)
+
+        hpi = elp[hpi_idx]
+        elp = elp[eeg_idx]
+        point_names = list(point_names[eeg_idx])
+        dig_ch_pos = dict(zip(point_names, elp))
+
+    dig = _make_dig_points(nasion=nasion, lpa=lpa, rpa=rpa, hpi=hpi,
+                           extra_points=hsp, dig_ch_pos=dig_ch_pos,
+                           coord_frame='unknown')  # should be ISOTRAK
+    dig_hpi = _make_dig_points(hpi=hpi_dev, coord_frame='meg')
+
+    dig = _format_dig_points(dig + dig_hpi)
+
+    montage = DigMontage(dig=dig, ch_names=point_names)
+    return montage
 
 
 def _set_montage(info, montage, update_ch_names=False, set_dig=True):
