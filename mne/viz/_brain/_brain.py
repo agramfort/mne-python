@@ -225,6 +225,62 @@ class _Brain(object):
         # Force rendering
         self._renderer.show()
 
+
+    def _get_time_data(self, array, time, initial_time, time_label):
+        # Create time array and add label if > 1D
+        if array.ndim <= 1:
+            time_idx = 0
+        else:
+            # check time array
+            if time is None:
+                time = np.arange(array.shape[-1])
+            else:
+                time = np.asarray(time)
+                if time.shape != (array.shape[-1],):
+                    raise ValueError('time has shape %s, but need shape %s '
+                                     '(array.shape[-1])' %
+                                     (time.shape, (array.shape[-1],)))
+
+            if self._n_times is None:
+                self._n_times = len(time)
+                self._times = time
+            elif len(time) != self._n_times:
+                raise ValueError("New n_times is different from previous "
+                                 "n_times")
+            elif not np.array_equal(time, self._times):
+                raise ValueError("Not all time values are consistent with "
+                                 "previously set times.")
+
+            # initial time
+            if initial_time is None:
+                time_idx = 0
+            else:
+                time_idx = self.index_for_time(initial_time)
+
+            # time label
+            if isinstance(time_label, str):
+                time_label_fmt = time_label
+
+                def time_label(x):
+                    return time_label_fmt % x
+            # self._data["time_label"] = time_label
+            # self._data["time"] = time
+            # self._data["time_idx"] = 0
+
+        if time is not None and len(array.shape) == 2:
+            # we have scalar_data with time dimension
+            act_data = array[:, time_idx]
+        else:
+            # we have scalar data without time
+            act_data = array
+
+        self._data['time'] = time
+        self._data['initial_time'] = initial_time
+        self._data['time_label'] = time_label
+        self._data['time_idx'] = time_idx
+
+        return act_data
+
     @verbose
     def add_data(self, array, fmin=None, fmid=None, fmax=None,
                  thresh=None, center=None, transparent=False, colormap="auto",
@@ -341,64 +397,15 @@ class _Brain(object):
         array = np.asarray(array)
         self._data['array'] = array
 
-        # Create time array and add label if > 1D
-        if array.ndim <= 1:
-            time_idx = 0
-        else:
-            # check time array
-            if time is None:
-                time = np.arange(array.shape[-1])
-            else:
-                time = np.asarray(time)
-                if time.shape != (array.shape[-1],):
-                    raise ValueError('time has shape %s, but need shape %s '
-                                     '(array.shape[-1])' %
-                                     (time.shape, (array.shape[-1],)))
-
-            if self._n_times is None:
-                self._n_times = len(time)
-                self._times = time
-            elif len(time) != self._n_times:
-                raise ValueError("New n_times is different from previous "
-                                 "n_times")
-            elif not np.array_equal(time, self._times):
-                raise ValueError("Not all time values are consistent with "
-                                 "previously set times.")
-
-            # initial time
-            if initial_time is None:
-                time_idx = 0
-            else:
-                time_idx = self.index_for_time(initial_time)
-
-            # time label
-            if isinstance(time_label, str):
-                time_label_fmt = time_label
-
-                def time_label(x):
-                    return time_label_fmt % x
-            self._data["time_label"] = time_label
-            self._data["time"] = time
-            self._data["time_idx"] = 0
-            y_txt = 0.05 + 0.1 * bool(colorbar)
-
-        if time is not None and len(array.shape) == 2:
-            # we have scalar_data with time dimension
-            act_data = array[:, time_idx]
-        else:
-            # we have scalar data without time
-            act_data = array
-
         fmin, fmid, fmax = _update_limits(
             fmin, fmid, fmax, center, array
         )
 
+        y_txt = 0.05 + 0.1 * bool(colorbar)
+        act_data = self._get_time_data(array, time, initial_time)
+
         self._data['clim'] = clim
         self._data['user_colormap'] = user_colormap
-        self._data['time'] = time
-        self._data['initial_time'] = initial_time
-        self._data['time_label'] = time_label
-        self._data['time_idx'] = time_idx
         self._data['transparent'] = transparent
         # data specific for a hemi
         self._data[hemi] = dict()
@@ -981,10 +988,7 @@ class _Brain(object):
         from ..backends._pyvista import _set_colormap_range
         from scipy.interpolate import interp1d
         user_clim = self._data['clim']
-        if user_clim is not None and 'lims' in user_clim:
-            allow_pos_lims = False
-        else:
-            allow_pos_lims = True
+        allow_pos_lims = self._data['allow_pos_lims']
         if user_clim is not None and restore:
             clim = user_clim
         else:

@@ -1221,17 +1221,7 @@ def _sensor_shape(coil):
     return rrs, tris
 
 
-def _limits_to_control_points(clim, stc_data, colormap, transparent,
-                              allow_pos_lims=True, linearize=False):
-    """Convert limits (values or percentiles) to control points.
-
-    This function also does the nonlinear scaling of the colormap in the
-    case of a diverging colormap, and it forces transparency in the
-    alpha channel.
-    """
-    # Based on type of limits specified, get cmap control points
-    import matplotlib.pyplot as plt
-    from matplotlib.colors import ListedColormap
+def _check_cmap_auto(colormap, clim, stc_data, allow_pos_lims):
     if colormap == 'auto':
         if clim == 'auto':
             if allow_pos_lims and (stc_data < 0).any():
@@ -1243,11 +1233,29 @@ def _limits_to_control_points(clim, stc_data, colormap, transparent,
                 colormap = 'hot'
             else:  # 'pos_lims' in clim
                 colormap = 'mne'
+    return colormap
+
+
+def _limits_to_control_points(clim, stc_data, colormap, transparent,
+                              allow_pos_lims=True, linearize=False):
+    """Convert limits (values or percentiles) to control points.
+
+    This function also does the nonlinear scaling of the colormap in the
+    case of a diverging colormap, and it forces transparency in the
+    alpha channel.
+    """
+    # Based on type of limits specified, get cmap control points
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap
+
+    colormap = _check_cmap_auto(colormap, clim, stc_data, allow_pos_lims)
+
     diverging_maps = ['PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu',
                       'RdYlBu', 'RdYlGn', 'Spectral', 'coolwarm', 'bwr',
                       'seismic']
     diverging_maps += [d + '_r' for d in diverging_maps]
     diverging_maps += ['mne', 'mne_analyze', ]
+    print(locals())
     if clim == 'auto':
         # this is merely a heuristic!
         if allow_pos_lims and colormap in diverging_maps:
@@ -1706,7 +1714,7 @@ def plot_source_estimates(stc, subject=None, surface='inflated', hemi='lh',
 
     time_label, times = _handle_time(time_label, time_unit, stc.times)
     # convert control points to locations in colormap
-    user_colormap = colormap  # save the original colormap
+    user_colormap = _check_cmap_auto(colormap, clim, stc.data, allow_pos_lims)
     colormap, scale_pts, diverging, transparent, _ = _limits_to_control_points(
         clim, stc.data, colormap, transparent)
 
